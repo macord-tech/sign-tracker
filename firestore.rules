@@ -64,6 +64,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Patrol Run high score: anyone signed in can set it, in their own name, only by beating it
+    match /game/leader {
+      allow read: if isMember();
+      allow create, update: if isMember()
+        && request.resource.data.keys().hasOnly(['best', 'name', 'uid', 'at'])
+        && request.resource.data.best is int && request.resource.data.best < 1000000
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name == get(/databases/$(db)/documents/members/$(request.auth.uid)).data.name
+        && (resource == null || request.resource.data.best > resource.data.best);
+    }
+
     function signFieldsOk() {
       return request.resource.data.keys().hasOnly([
         'num', 'address', 'lat', 'lng', 'assignee', 'pickupAssignee', 'notes', 'hazards',
