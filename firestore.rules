@@ -96,6 +96,11 @@ service cloud.firestore {
       allow update: if isAdmin()
         // the volunteer who created a sign can edit all of it
         || (isCreator() && signFieldsOk() && pickupOk() && request.resource.data.createdByUid == request.auth.uid)
+        // a volunteer can claim the pickup of a dropped-off sign that nobody is picking up, in their own name
+        || (isMember() && resource.data.status == 'placed'
+            && resource.data.get('pickupAssignee', '') == ''
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pickupAssignee', 'updatedAt', 'updatedBy'])
+            && request.resource.data.pickupAssignee == get(/databases/$(db)/documents/members/$(request.auth.uid)).data.name)
         // volunteers can tag dropped off / picked up (the app limits this to the assigned volunteers)
         || (isMember() && pickupOk()
             && request.resource.data.diff(resource.data).affectedKeys()
