@@ -157,20 +157,72 @@
     if (taps.length >= 5) { taps = []; startGame(); }
   });
 
+  // ---------- Shared high score (Firestore game/leader; local fallback in demo mode) ----------
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const first = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+  let fbP = null;
+  function fb() {
+    if (!fbP) fbP = (async () => {
+      try {
+        if (!window.APP_CONFIG?.firebase?.projectId) return null;
+        const U = (m) => `https://www.gstatic.com/firebasejs/10.14.1/firebase-${m}.js`;
+        const [{ getApps }, A, F] = await Promise.all([import(U("app")), import(U("auth")), import(U("firestore"))]);
+        const app = getApps()[0]; if (!app) return null;
+        const auth = A.getAuth(app); if (!auth.currentUser) return null;
+        return { F, db: F.getFirestore(app), uid: auth.currentUser.uid };
+      } catch (e) { return null; }
+    })();
+    return fbP;
+  }
+  let myName = null;
+  async function getMyName() {
+    if (myName) return myName;
+    const c = await fb();
+    if (c) { try { const d = await withTimeout(c.F.getDoc(c.F.doc(c.db, "members", c.uid)), 5000); myName = d.data()?.name || null; } catch (e) {} }
+    if (!myName) { try { myName = JSON.parse(localStorage.getItem("signtracker.demo.me") || "null")?.name || null; } catch (e) {} }
+    return myName || ($("#meBtn")?.textContent || "").trim() || "You";
+  }
+  async function loadLeader() {
+    const c = await fb();
+    if (c) {
+      try { const d = await withTimeout(c.F.getDoc(c.F.doc(c.db, "game", "leader")), 5000); const v = d.data(); return v ? { best: v.best || 0, name: v.name || "" } : { best: 0, name: "" }; }
+      catch (e) { return null; }
+    }
+    try { return JSON.parse(localStorage.getItem("st.patrolLeader") || "null") || { best: 0, name: "" }; } catch (e) { return { best: 0, name: "" }; }
+  }
+  async function saveLeader(best) {
+    const name = await getMyName();
+    const c = await fb();
+    if (c) {
+      try { await withTimeout(c.F.setDoc(c.F.doc(c.db, "game", "leader"), { best, name, uid: c.uid, at: c.F.serverTimestamp() }), 8000); return { best, name }; }
+      catch (e) { return null; }
+    }
+    try { localStorage.setItem("st.patrolLeader", JSON.stringify({ best, name })); } catch (e) {}
+    return { best, name };
+  }
+
   // ---------- Patrol Run: an original downhill dodging game ----------
   function startGame() {
     const wrap = document.createElement("div"); wrap.className = "game-modal";
     wrap.innerHTML = `<canvas></canvas>
-      <div class="game-ui"><span id="gScore">0 m</span><span>Patrol Run</span><button class="btn small light" type="button" data-q>✕</button></div>
+      <div class="game-ui"><span id="gScore">0 pts</span><span id="gLead">Patrol Run</span><button class="btn small light" type="button" data-q>✕</button></div>
       <div class="game-over hidden"><div class="box"><h3>Wipeout!</h3><p id="gMsg"></p><div class="row"><button class="btn primary" type="button" data-again>Ski again</button><button class="btn light" type="button" data-q>Close</button></div></div></div>`;
     document.body.appendChild(wrap);
     const cv = wrap.querySelector("canvas"), ctx = cv.getContext("2d");
-    const over = wrap.querySelector(".game-over"), scoreEl = wrap.querySelector("#gScore"), msg = wrap.querySelector("#gMsg");
+    const over = wrap.querySelector(".game-over"), scoreEl = wrap.querySelector("#gScore"), leadEl = wrap.querySelector("#gLead"), msg = wrap.querySelector("#gMsg");
     let W = 0, H = 0, dpr = 1;
     function size() { dpr = Math.min(2, window.devicePixelRatio || 1); W = wrap.clientWidth; H = wrap.clientHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
     size(); window.addEventListener("resize", size);
 
     let best = 0; try { best = +localStorage.getItem("st.patrolBest") || 0; } catch (e) {}
+    let leader = null; // { best, name } or null when unknown (offline)
+    const showLeader = () => {
+      if (!leader || !leader.best) { leadEl.textContent = "Patrol Run"; return; }
+      const s = g ? score() : 0;
+      leadEl.textContent = s > leader.best ? "🏆 You're in the lead!" : `🏆 ${first(leader.name)} ${leader.best}`;
+    };
+    loadLeader().then((l) => { leader = l; showLeader(); });
     let g, raf = 0, last = 0, keys = { l: false, r: false }, touchX = null;
 
     function reset() {
@@ -212,8 +264,20 @@
     function die(why) {
       if (g.dead) return; g.dead = true;
       const s = score(); if (s > best) { best = s; try { localStorage.setItem("st.patrolBest", String(best)); } catch (e) {} }
-      msg.innerHTML = `${why}<br><b>${s}</b> points · best <b>${best}</b>`;
+      const line = (l) => l && l.best ? `🏆 Leader: <b>${esc(first(l.name))}</b> with <b>${l.best}</b>` : "";
+      msg.innerHTML = `${why}<br>Your score <b>${s}</b> · your best <b>${best}</b><br><span data-lead>${line(leader)}</span>`;
       setTimeout(() => over.classList.remove("hidden"), 450);
+      const leadSpan = msg.querySelector("[data-lead]");
+      (async () => {
+        const l = await loadLeader(); if (l) leader = l;
+        if (leader && s > leader.best) {
+          const beat = leader.best ? ` You beat ${esc(first(leader.name))}'s ${leader.best}.` : "";
+          leadSpan.innerHTML = `🏆 <b>New leader!</b>${beat}`;
+          const saved = await saveLeader(s);
+          if (saved) leader = saved; else { const l2 = await loadLeader(); if (l2) leader = l2; if (!saved) leadSpan.innerHTML = line(leader) || "Couldn't save the high score. Check your signal."; }
+        } else leadSpan.innerHTML = line(leader);
+        showLeader();
+      })();
     }
     function drawTree(x, y, s) {
       ctx.fillStyle = "#6d4c41"; ctx.fillRect(x - 2 * s, y + 8 * s, 4 * s, 7 * s);
@@ -250,6 +314,7 @@
       if (g.flash > 0) { ctx.fillStyle = `rgba(46,158,68,${g.flash})`; ctx.font = "800 18px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("+ bonus!", g.x, g.y - 30); }
       if (g.t < 3 && !g.dead) { ctx.fillStyle = "rgba(31,41,51,.75)"; ctx.font = "600 15px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("Drag or use ← → · Go through red gates · Grab first-aid kits", W / 2, H - 40); }
       scoreEl.textContent = `${score()} pts`;
+      if (!g.dead && leader) showLeader();
     }
     function loop(ts) {
       const dt = Math.min(0.05, (ts - (last || ts)) / 1000); last = ts;
