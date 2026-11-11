@@ -1,0 +1,102 @@
+rules_version = '2';
+
+// Paste this whole file into Firebase console > Firestore Database > Rules, then Publish.
+//
+// The coordinator code lives in the document  private/settings  (field: adminCode = "CSPadmin").
+// Volunteer codes are created in the app (Manage > Volunteers) and stored in roster/{code}.
+// Nobody can read that document from the app; these rules check codes against it.
+
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function settings() {
+      return get(/databases/$(db)/documents/private/settings).data;
+    }
+    function signedIn() { return request.auth != null; }
+    function isMember() {
+      return signedIn() && exists(/databases/$(db)/documents/members/$(request.auth.uid));
+    }
+    function isAdmin() {
+      return isMember()
+        && get(/databases/$(db)/documents/members/$(request.auth.uid)).data.role == 'admin';
+    }
+    function validJoin(uid) {
+      let d = request.resource.data;
+      return signedIn() && request.auth.uid == uid
+        && d.keys().hasOnly(['name', 'role', 'code', 'joinedAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 60
+        && d.code is string && d.code.size() > 0 && d.code.size() <= 40
+        && (
+          // Volunteer: code (e.g. 0142CSP) must be on the roster under this exact name
+          (d.role == 'volunteer'
+            && exists(/databases/$(db)/documents/roster/$(d.code))
+            && get(/databases/$(db)/documents/roster/$(d.code)).data.name == d.name)
+          // Coordinator: the master code (not case-sensitive)
+          || (d.role == 'admin' && d.code.lower() == settings().adminCode.lower())
+        );
+    }
+
+    // Secret codes: never readable or writable from the app
+    match /private/{doc} {
+      allow read, write: if false;
+    }
+
+    // Volunteer roster. A single entry can be fetched only by its exact code (to sign in);
+    // only coordinators can list or change it. Phone numbers live in rosterPrivate (coordinators only).
+    match /roster/{code} {
+      allow get: if signedIn();
+      allow list, write: if isAdmin();
+    }
+    match /rosterPrivate/{code} {
+      allow read, write: if isAdmin();
+    }
+
+    // One document per signed-in device/person
+    match /members/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if validJoin(uid);
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // Emergency contacts and safety notes: everyone reads, coordinators edit
+    match /info/{docId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+
+    function signFieldsOk() {
+      return request.resource.data.keys().hasOnly([
+        'num', 'address', 'lat', 'lng', 'assignee', 'pickupAssignee', 'notes', 'hazards',
+        'status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt',
+        'updatedAt', 'updatedBy', 'createdAt', 'createdBy', 'createdByUid'])
+        && request.resource.data.status in ['pending', 'placed', 'retrieved']
+        && (!('hazards' in request.resource.data) || request.resource.data.hazards is list)
+        && request.resource.data.address is string && request.resource.data.address.size() <= 300;
+    }
+    function isCreator() {
+      return isMember() && resource.data.get('createdByUid', '') == request.auth.uid;
+    }
+
+    match /signs/{signId} {
+      allow read: if isMember();
+
+      // Coordinators can add anything; volunteers can add a sign they create themselves
+      allow create: if isAdmin()
+        || (isMember() && signFieldsOk()
+            && request.resource.data.createdByUid == request.auth.uid
+            && request.resource.data.status in ['pending', 'placed']);
+
+      // Coordinators, or the volunteer who created the sign, can delete it
+      allow delete: if isAdmin() || isCreator();
+
+      allow update: if isAdmin()
+        // the volunteer who created a sign can edit all of it
+        || (isCreator() && signFieldsOk() && request.resource.data.createdByUid == request.auth.uid)
+        // any volunteer can mark any sign placed / retrieved
+        || (isMember()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt', 'updatedAt', 'updatedBy'])
+            && request.resource.data.status in ['pending', 'placed', 'retrieved']);
+    }
+  }
+}

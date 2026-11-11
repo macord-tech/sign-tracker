@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#c8102e">
+  <script>
+    // Apply saved light/dark choice before anything draws (avoids a flash)
+    try { var t = localStorage.getItem("st.theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <title>Sign Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Loading -->
+  <div id="loading" class="screen center">
+    <div class="spinner"></div>
+    <p id="loadingMsg">Connecting…</p>
+  </div>
+
+  <!-- Join screen -->
+  <div id="join" class="screen center hidden">
+    <form id="joinForm" class="card join-card">
+      <img class="join-logo" src="logo.png" alt="Canadian Ski Patrol's Winter Extreme Ski &amp; Board Swap">
+      <div class="join-head">
+        <h1 class="event-name">Sign Tracker</h1>
+        <button class="btn ghost icon-btn theme-btn" type="button" title="Light / dark view" aria-label="Switch light or dark view"><svg class="moon" viewBox="0 0 24 24"><path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="sun" viewBox="0 0 24 24"><path fill="currentColor" d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5 1.5 3h-3zm0 20-1.5-3h3zM2 12l3-1.5v3zm20 0-3 1.5v-3zM4.9 4.9l3.2 1-2.2 2.2zm14.2 14.2-3.2-1 2.2-2.2zM4.9 19.1l1-3.2 2.2 2.2zM19.1 4.9l-1 3.2-2.2-2.2z"/></svg></button>
+      </div>
+      <p class="muted">Enter your access code. It's the <b>last 4 digits of your phone number</b> followed by <b>CSP</b>, e.g. <b>0142CSP</b>.</p>
+      <label>Access code
+        <input id="joinCode" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. 0142CSP" class="code-input">
+      </label>
+      <label id="joinNameWrap" class="hidden">Coordinator name
+        <input id="joinName" maxlength="60" autocomplete="name" placeholder="Your name">
+      </label>
+      <button class="btn primary big" type="submit">Sign in</button>
+      <p id="joinErr" class="error"></p>
+      <p id="demoNote" class="demo-note hidden">Demo mode: data stays on this device. Coordinator code <b>CSPadmin</b>. Sample volunteer code <b>0142CSP</b> (Pat Lee).</p>
+    </form>
+  </div>
+
+  <!-- Main app -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="title">
+        <span class="brand-logo"><img src="logo.png" alt="Winter Extreme"></span>
+        <span class="event-name">Sign Tracker</span>
+        <span id="syncBadge" class="badge hidden">Offline – will sync</span>
+      </div>
+      <div class="top-actions">
+        <button id="adminBtn" class="btn small on-top solid hidden" type="button">Manage</button>
+        <button class="btn on-top icon-btn theme-btn" type="button" title="Light / dark view" aria-label="Switch light or dark view"><svg class="moon" viewBox="0 0 24 24"><path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="sun" viewBox="0 0 24 24"><path fill="currentColor" d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5 1.5 3h-3zm0 20-1.5-3h3zM2 12l3-1.5v3zm20 0-3 1.5v-3zM4.9 4.9l3.2 1-2.2 2.2zm14.2 14.2-3.2-1 2.2-2.2zM4.9 19.1l1-3.2 2.2 2.2zM19.1 4.9l-1 3.2-2.2-2.2z"/></svg></button>
+        <button id="meBtn" class="btn small on-top" type="button" title="Signed in as"></button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button data-view="map" class="active" type="button"><span class="tab-label-narrow">Map</span><span class="tab-label-wide">Signs</span></button>
+      <button data-view="list" type="button">List <span id="listCount" class="count"></span></button>
+      <button data-view="safety" type="button"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3zm-1 14-4-4 1.4-1.4L11 13.2l5.6-5.6L18 9l-7 7z"/></svg>Safety<span id="safetyDot" class="newdot hidden"></span></button>
+      <button data-view="contacts" class="sos" type="button"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>Emergency</button>
+    </nav>
+
+    <main class="layout" data-view="map">
+      <section class="map-pane">
+        <div id="map"></div>
+        <div id="mapMsg" class="map-msg hidden"></div>
+        <button id="locateBtn" class="fab" type="button" title="Show my location" aria-label="Show my location">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>
+        </button>
+        <div id="nextMap" class="next-wrap"></div>
+        <button class="btn primary new-btn new-sign" type="button">+ New sign</button>
+        <button id="assignBtn" class="btn assign-btn hidden" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zm-8 0c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg>
+          Assign</button>
+        <div id="assignBar" class="assign-bar hidden">
+          <div class="ab-top">
+            <div class="seg job-seg">
+              <button data-job="drop" type="button">Drop-off</button>
+              <button data-job="pickup" type="button">Pickup</button>
+            </div>
+            <button class="btn small light assign-done" type="button">Done</button>
+          </div>
+          <div class="ab-info"></div>
+          <div class="ab-actions">
+            <button class="btn light sel-strag" type="button"></button>
+            <button class="btn link sel-clear" type="button">Clear</button>
+            <button class="btn primary do-assign" type="button"></button>
+          </div>
+        </div>
+        <div id="pickBanner" class="pick-banner hidden">Tap the map where the sign goes <button id="pickCancel" class="btn small light" type="button">Cancel</button></div>
+        <div id="mapCard" class="map-card hidden"></div>
+        <div class="legend">
+          <span><i class="dot pending"></i>To place</span>
+          <span><i class="dot placed"></i>Placed</span>
+          <span><i class="dot retrieved"></i>Retrieved</span>
+        </div>
+      </section>
+
+      <aside class="side-pane">
+        <div id="assignPanel" class="assign-panel hidden"></div>
+        <div id="nextList" class="next-wrap list-next"></div>
+        <div class="progress-box" id="progressBox"></div>
+        <button class="btn primary new-sign list-new" type="button">+ New sign location</button>
+        <div class="filters">
+          <div class="seg" id="scopeSeg">
+            <button data-scope="mine" class="active" type="button">My signs</button>
+            <button data-scope="all" type="button">All signs</button>
+          </div>
+          <select id="statusFilter" aria-label="Filter by status">
+            <option value="all">Any status</option>
+            <option value="pending">To place</option>
+            <option value="placed">Placed (to pick up)</option>
+            <option value="retrieved">Retrieved</option>
+          </select>
+          <select id="sortSel" aria-label="Sort">
+            <option value="num">By number</option>
+            <option value="near">Nearest first</option>
+          </select>
+        </div>
+        <div id="list" class="list"></div>
+      </aside>
+    </main>
+
+    <!-- Safety notes page -->
+    <section id="safetyPage" class="page hidden">
+      <div class="page-inner" id="safetyInner"></div>
+    </section>
+
+    <!-- Emergency contacts page -->
+    <section id="contactsPage" class="page hidden">
+      <div class="page-inner" id="contactsInner"></div>
+    </section>
+  </div>
+
+  <!-- Admin drawer -->
+  <div id="admin" class="drawer hidden" role="dialog" aria-label="Manage signs">
+    <div class="drawer-inner">
+      <div class="drawer-head">
+        <h2>Manage signs</h2>
+        <button id="adminClose" class="btn small ghost" type="button">Close</button>
+      </div>
+
+      <section class="card assign-sec">
+        <h3>Assign signs to volunteers</h3>
+        <p class="muted small">Tap pins on the map to select them, then choose a volunteer. Drop-off and pickup are assigned separately. Anything unassigned waits in <b>Last Call Stragglers</b>.</p>
+        <div id="assignSummary"></div>
+        <div class="row wrap">
+          <button class="btn primary open-assign" data-job="drop" type="button">Assign drop-off</button>
+          <button class="btn light open-assign" data-job="pickup" type="button">Assign pickup</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Add one sign</h3>
+        <p class="muted small">Drop a pin or type an address, describe the spot and note hazards.</p>
+        <button id="adminNewBtn" class="btn primary" type="button">+ New sign</button>
+        <datalist id="memberNames"></datalist>
+      </section>
+
+      <section class="card">
+        <h3>Add many at once</h3>
+        <p class="muted small">One sign per line: <code>address | volunteer | notes</code>. You can also paste straight from a spreadsheet with columns Address, Volunteer, Notes.</p>
+        <textarea id="bulkText" rows="6" placeholder="456 Oak Ave | Pat Lee | front lawn&#10;789 Pine Rd | Sam Wu"></textarea>
+        <div class="row">
+          <button id="bulkBtn" class="btn primary" type="button">Add all</button>
+          <span id="bulkMsg" class="small"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Volunteers &amp; access codes</h3>
+        <p class="muted small">Add each volunteer's name and phone number. Their code is the last 4 digits of the phone + CSP. They sign in with that code alone.</p>
+        <form id="volForm" class="vol-form" autocomplete="off">
+          <input id="volName" required maxlength="60" placeholder="Name">
+          <input id="volPhone" required inputmode="tel" placeholder="Phone number">
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+        <p id="volMsg" class="small"></p>
+        <div id="volTable"></div>
+      </section>
+
+      <section class="card">
+        <h3>Data</h3>
+        <div class="row wrap">
+          <button id="exportBtn" class="btn light" type="button">Download CSV</button>
+          <button id="resetBtn" class="btn light" type="button">Reset all to "To place"</button>
+          <button id="wipeBtn" class="btn danger" type="button">Delete all signs</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- New / edit sign sheet (everyone) -->
+  <div id="signSheet" class="drawer hidden" role="dialog" aria-label="Sign location">
+    <div class="drawer-inner">
+      <div class="drawer-head">
+        <h2 id="ssTitle">New sign location</h2>
+        <button id="ssClose" class="btn small ghost" type="button">Close</button>
+      </div>
+      <form id="ssForm" class="card sheet-form" autocomplete="off">
+        <h3>1. Location</h3>
+        <div id="ssLoc" class="loc-status">No pin yet</div>
+        <div class="row wrap">
+          <button id="ssDrop" class="btn primary" type="button">Drop pin on map</button>
+          <button id="ssHere" class="btn light" type="button">Use my location</button>
+        </div>
+        <label>Address
+          <span class="addr-row">
+            <input id="ssAddress" required placeholder="Street address or nearest intersection">
+            <button id="ssFind" class="btn light" type="button">Find</button>
+          </span>
+        </label>
+        <label>Description of the location
+          <textarea id="ssDesc" rows="3" placeholder="e.g. Grass boulevard on the NE corner, left of the bus shelter"></textarea>
+        </label>
+
+        <h3>2. Hazards in the immediate area</h3>
+        <p class="muted small" style="margin:0 0 8px">Tick everything the person placing or collecting this sign should know about.</p>
+        <div id="ssHazards" class="hazard-grid"></div>
+        <label>Other hazards
+          <input id="ssHazOther" placeholder="Anything else, separated by commas">
+        </label>
+
+        <h3>3. Who's looking after it</h3>
+        <label>Drop-off volunteer
+          <input id="ssAssignee" list="memberNames" placeholder="Name">
+        </label>
+        <label id="ssPickupWrap">Pickup volunteer
+          <input id="ssPickup" list="memberNames" placeholder="Leave blank to add to Last Call Stragglers">
+        </label>
+        <label class="check" id="ssPlacedWrap"><input type="checkbox" id="ssPlaced"> I've already placed this sign</label>
+
+        <div class="row wrap">
+          <button id="ssSave" class="btn primary big-ish" type="submit">Save sign</button>
+          <button id="ssDelete" class="btn danger hidden" type="button">Delete sign</button>
+        </div>
+        <p id="ssMsg" class="small"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Choose a maps app for directions -->
+  <div id="navSheet" class="modal hidden" role="dialog" aria-label="Open directions">
+    <div class="modal-card">
+      <div class="nav-to">Directions to</div>
+      <div id="navAddr" class="nav-addr"></div>
+      <div id="navOpts" class="nav-opts"></div>
+      <button id="navCopy" class="btn light" type="button">Copy address</button>
+      <label class="check"><input type="checkbox" id="navRemember"> Always use the app I pick</label>
+      <button id="navCancel" class="btn ghost" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Celebration when a volunteer finishes all their signs -->
+  <div id="celebrate" class="celebrate hidden" role="dialog" aria-live="polite" aria-label="All signs done">
+    <canvas id="confetti" aria-hidden="true"></canvas>
+    <div class="celebrate-card">
+      <img src="icon-180.png" alt="" class="celebrate-icon">
+      <h2>Thank you for your service!</h2>
+      <p id="celebrateSub"></p>
+      <button id="celebrateClose" class="btn primary big" type="button">Done</button>
+    </div>
+  </div>
+
+  <!-- Pick a volunteer for the selected signs -->
+  <div id="assignPick" class="modal hidden" role="dialog" aria-label="Assign to volunteer">
+    <div class="modal-card">
+      <div class="nav-to" id="apJob"></div>
+      <div class="nav-addr" id="apTitle"></div>
+      <div id="apList" class="ap-list"></div>
+      <div class="addr-row">
+        <input id="apNew" placeholder="Someone new? Type their name" list="memberNames">
+        <button id="apAdd" class="btn primary" type="button">Assign</button>
+      </div>
+      <button id="apUnassign" class="btn danger" type="button">Unassign (send to Last Call Stragglers)</button>
+      <button id="apCancel" class="btn ghost" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
