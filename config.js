@@ -45,11 +45,11 @@ window.APP_CONFIG = {
   // --- Firebase (free "Spark" plan: real-time shared data) ----------------
   // Paste the "firebaseConfig" values from Firebase console > Project settings > Your apps.
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyACxe6nzQLROz-dKwT2Ky0OHywtUUEhYLE",
+    authDomain: "winter-extreme-signs.firebaseapp.com",
+    projectId: "winter-extreme-signs",
+    storageBucket: "winter-extreme-signs.firebasestorage.app",
+    messagingSenderId: "108969981865",
+    appId: "1:108969981865:web:c7cf5b6b62b22a6a17b6b8"
   }
 };
