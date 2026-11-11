@@ -96,9 +96,9 @@
         <div id="pickBanner" class="pick-banner hidden">Tap the map where the sign goes <button id="pickCancel" class="btn small light" type="button">Cancel</button></div>
         <div id="mapCard" class="map-card hidden"></div>
         <div class="legend">
-          <span><i class="dot pending"></i>To place</span>
-          <span><i class="dot placed"></i>Placed</span>
-          <span><i class="dot retrieved"></i>Retrieved</span>
+          <span><i class="dot pending"></i>To drop off</span>
+          <span><i class="dot placed"></i>Dropped off</span>
+          <span><i class="dot retrieved"></i>Picked up</span>
         </div>
       </section>
 
@@ -114,9 +114,9 @@
           </div>
           <select id="statusFilter" aria-label="Filter by status">
             <option value="all">Any status</option>
-            <option value="pending">To place</option>
-            <option value="placed">Placed (to pick up)</option>
-            <option value="retrieved">Retrieved</option>
+            <option value="pending">To drop off</option>
+            <option value="placed">Dropped off (to pick up)</option>
+            <option value="retrieved">Picked up</option>
           </select>
           <select id="sortSel" aria-label="Sort">
             <option value="num">By number</option>
@@ -189,7 +189,7 @@
         <h3>Data</h3>
         <div class="row wrap">
           <button id="exportBtn" class="btn light" type="button">Download CSV</button>
-          <button id="resetBtn" class="btn light" type="button">Reset all to "To place"</button>
+          <button id="resetBtn" class="btn light" type="button">Reset all to "To drop off"</button>
           <button id="wipeBtn" class="btn danger" type="button">Delete all signs</button>
         </div>
       </section>
@@ -234,7 +234,7 @@
         <label id="ssPickupWrap">Pickup volunteer
           <input id="ssPickup" list="memberNames" placeholder="Leave blank to add to Last Call Stragglers">
         </label>
-        <label class="check" id="ssPlacedWrap"><input type="checkbox" id="ssPlaced"> I've already placed this sign</label>
+        <label class="check" id="ssPlacedWrap"><input type="checkbox" id="ssPlaced"> I've already dropped off this sign</label>
 
         <div class="row wrap">
           <button id="ssSave" class="btn primary big-ish" type="submit">Save sign</button>
