@@ -235,6 +235,9 @@ async function onCardClick(e) {
     case "claim-pickup":
       if (!needsPickupTask(sign)) { toast(`${sign.pickupAssignee || "Someone"} is already picking this one up.`, 4000); break; }
       upd({ pickupAssignee: who }, `You're picking up #${sign.num} ✓`); break;
+    case "claim-drop":
+      if (dispState(sign) !== "potential") { toast(`${sign.assignee || "Someone"} is already dropping this one off.`, 4000); break; }
+      upd(sign.status === "retrieved" ? { ...RESET_TO_PLACE, assignee: who } : { assignee: who }, `You're dropping off #${sign.num} ✓`); break;
     case "place-again":
       if (confirm(`Use this location again? #${sign.num} goes back to "To drop off"${sign.assignee ? ` for ${sign.assignee}` : ""}. Its drop-off/pickup times and pickup volunteer are cleared. You can change who drops it off in Assign mode.`))
         upd(RESET_TO_PLACE, `#${sign.num} is back to "To drop off"`);
@@ -340,7 +343,10 @@ function cardHTML(s, inMap = false) {
   if (s._pending) statusLine += ` · <i>saving…</i>`;
   const dist = state.userPos && hasLoc(s) ? ` · ${fmtDist(distM(state.userPos, s))} away` : "";
   let main = "", hint = "";
-  if (st === "pending") {
+  if (dispState(s) === "potential") {
+    main = `<button class="btn place" data-act="claim-drop" data-id="${s.id}">🙋 I'll sign that</button>`;
+    hint = "Nobody is dropping a sign off here yet. Tap the button to take it on.";
+  } else if (st === "pending") {
     if (canTagDropped(s) && dispState(s) === "pending") main = `<button class="btn place" data-act="place" data-id="${s.id}">✓ Sign dropped off</button>`;
     if (mineFor(s, "pickup") && !mineFor(s, "drop")) hint = "You're picking this one up. It has to be tagged dropped off first: tag it yourself once you see the sign there.";
   } else if (st === "placed") {
