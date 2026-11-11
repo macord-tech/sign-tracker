@@ -255,7 +255,7 @@
     }
     function spawn() {
       const r = Math.random(), x = 20 + Math.random() * (W - 40);
-      if (r < 0.55) g.things.push({ k: "tree", x, y: H + 40, s: 0.8 + Math.random() * 0.6 });
+      if (r < 0.55) g.things.push({ k: "tree", x, y: H + 40, s: 0.8 + Math.random() * 0.5, v: pickTree() });
       else if (r < 0.70) g.things.push({ k: "rock", x, y: H + 30 });
       else if (r < 0.77) g.things.push({ k: "coffee", x, y: H + 30 });
       else if (r < 0.82 && g.t > 4 && !g.things.some((o) => o.k === "dog")) {
@@ -288,8 +288,8 @@
         } else if (o.k === "dog") {
           if (Math.abs(o.x - g.x) < 20 && Math.abs(o.y - g.y) < 14) die("You tripped over the patrol dog. He's fine, just wants pets!");
         } else {
-          const rad = o.k === "tree" ? 11 * o.s : 12;
-          const oy = o.k === "tree" ? o.y + 6 * o.s : o.y;
+          const rad = o.k === "tree" ? TREES[o.v].rad * o.s : 12;
+          const oy = o.k === "tree" ? o.y + 2 * o.s : o.y;
           if (Math.hypot(o.x - g.x, oy - g.y) < rad + 7) die(o.k === "tree" ? "Tree wins this round." : "Hit a rock.");
         }
       }
@@ -314,11 +314,49 @@
         showLeader();
       })();
     }
-    function drawTree(x, y, s) {
-      ctx.fillStyle = "#6d4c41"; ctx.fillRect(x - 2 * s, y + 8 * s, 4 * s, 7 * s);
-      ctx.fillStyle = "#2e7d32";
-      for (let i = 0; i < 3; i++) { const w = (14 - i * 3) * s, ty = y - 14 * s + i * 7 * s; ctx.beginPath(); ctx.moveTo(x, ty - 6 * s); ctx.lineTo(x - w, ty + 10 * s); ctx.lineTo(x + w, ty + 10 * s); ctx.closePath(); ctx.fill(); }
-      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(x, y - 20 * s); ctx.lineTo(x - 4 * s, y - 14 * s); ctx.lineTo(x + 4 * s, y - 14 * s); ctx.fill();
+    // Pixel-art trees, generated once per game: speckled pines, snowy pines and a bare snag.
+    const TREE_PX = 2, TREE_W = 22, TREE_H = 28; // sprite grid (units) and unit size (px)
+    function makeTree(kind, seed) {
+      let r = seed; const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+      const c = document.createElement("canvas"); c.width = TREE_W * TREE_PX * 2; c.height = TREE_H * TREE_PX * 2;
+      const x = c.getContext("2d"); x.scale(2, 2);
+      const dot = (u, v, col) => { x.fillStyle = col; x.fillRect(u * TREE_PX, v * TREE_PX, TREE_PX, TREE_PX); };
+      const mid = TREE_W / 2;
+      if (kind === "snag") {
+        for (let v = 3; v < TREE_H; v++) { const w = v > 22 ? 2 : 1; for (let u = Math.floor(mid - w); u < Math.ceil(mid + w); u++) dot(u, v, rnd() < 0.3 ? "#4e342e" : "#6d4c41"); }
+        for (let i = 0; i < 6; i++) { const v = 5 + Math.floor(rnd() * 13), dir = rnd() < 0.5 ? -1 : 1, len = 2 + Math.floor(rnd() * 4);
+          for (let k = 1; k <= len; k++) dot(mid + dir * k - (dir < 0 ? 1 : 0), v - Math.floor(k / 2), "#5d4037"); }
+        return { c, rad: 5 };
+      }
+      const greens = ["#0f3d1f", "#14532d", "#1b6b30", "#24813a", "#2f9a45", "#4cb456", "#86d36a"];
+      const tiers = kind === "bush" ? [[8, 24, 9.5]] : [[0, 9, 5.5], [6, 16, 8.5], [12, 24, 10.5]]; // [top row, bottom row, half-width]
+      for (const [top, bot, hw] of tiers) {
+        for (let v = top; v <= bot; v++) {
+          const t = (v - top) / (bot - top), w = Math.max(0.8, (kind === "bush" ? Math.sin(Math.PI * Math.min(1, 0.12 + t * 0.95)) : 0.08 + t * 0.92) * hw + (rnd() - 0.5) * 1.2);
+          const u0 = Math.floor(mid - w), u1 = Math.ceil(mid + w) - 1;
+          for (let u = u0; u <= u1; u++) {
+            const side = (u - mid) / Math.max(1, w); // -1 left (lit) .. 1 right (shade)
+            let k = Math.floor(3 - side * 1.8 + (rnd() - 0.5) * 3.2); k = Math.max(0, Math.min(greens.length - 1, 6 - k));
+            let col = greens[k];
+            if (kind === "snowy" && ((v - top < 1) || (v >= bot - 1 && (u <= u0 + 2 || u >= u1 - 2) && v !== bot) || (v === bot && (u <= u0 + 3 || u >= u1 - 3) && u !== u0 && u !== u1))) col = side < 0.2 ? "#ffffff" : "#d6e4f2";
+            dot(u, v, col);
+          }
+        }
+      }
+      for (let v = 23; v < TREE_H; v++) for (let u = mid - 2; u < mid + 2; u++) dot(u, v, rnd() < 0.4 ? "#7a5a12" : "#a3801f");
+      return { c, rad: kind === "bush" ? 9 : 11 };
+    }
+    const TREES = [];
+    for (let i = 0; i < 4; i++) TREES.push(makeTree("pine", 101 + i * 977));
+    for (let i = 0; i < 2; i++) TREES.push(makeTree("snowy", 7001 + i * 313));
+    TREES.push(makeTree("bush", 4242));
+    TREES.push(makeTree("snag", 999));
+    const pickTree = () => { const r = Math.random(); return r < 0.55 ? Math.floor(Math.random() * 4) : r < 0.80 ? 4 + Math.floor(Math.random() * 2) : r < 0.92 ? 6 : 7; };
+    function drawTree(x, y, s, v) {
+      const t = TREES[v ?? 0], w = TREE_W * TREE_PX * s, h = TREE_H * TREE_PX * s;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(t.c, Math.round(x - w / 2), Math.round(y + 18 * s - h), Math.round(w), Math.round(h));
+      ctx.imageSmoothingEnabled = true;
     }
     function drawCoffee(x, y) {
       ctx.fillStyle = "#fff"; ctx.strokeStyle = "#5d4037"; ctx.lineWidth = 1.5;
@@ -363,7 +401,7 @@
       const off = (g.dist * 20) % 60;
       for (let y = -off; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(W / 2, y + 18, W, y); ctx.stroke(); }
       for (const o of g.things) {
-        if (o.k === "tree") drawTree(o.x, o.y, o.s);
+        if (o.k === "tree") drawTree(o.x, o.y, o.s, o.v);
         else if (o.k === "rock") { ctx.fillStyle = "#78909c"; ctx.beginPath(); ctx.ellipse(o.x, o.y, 13, 8, 0, 0, 7); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(o.x - 2, o.y - 4, 8, 3, 0, 0, 7); ctx.fill(); }
         else if (o.k === "gate") { for (const px of [o.x, o.x + o.w]) { ctx.fillStyle = "#37474f"; ctx.fillRect(px - 1.5, o.y - 22, 3, 24); ctx.fillStyle = o.hit ? "#bdbdbd" : "#d32f2f"; ctx.fillRect(px + 1.5, o.y - 22, 12, 9); } }
         else if (o.k === "coffee" && !o.got) drawCoffee(o.x, o.y);
