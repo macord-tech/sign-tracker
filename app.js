@@ -422,6 +422,9 @@ function assignable(s, job = state.assign.job) {
   return job === "drop" ? (s.status || "pending") !== "placed" : s.status === "placed";
 }
 const RESET_TO_PLACE = { status: "pending", placedBy: null, placedAt: null, retrievedBy: null, retrievedAt: null, pickupAssignee: "" };
+// Dropped off but nobody tasked to pick it up: small red dot on top of the pin
+const needsPickupTask = (s) => s.status === "placed" && !splitNames(s.pickupAssignee).length;
+const PICKUP_DOT = '<b title="Needs a pickup volunteer" style="position:absolute;left:8px;top:-5px;width:11px;height:11px;border-radius:50%;background:#e03131;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45);z-index:2"></b>';
 function makeIcon(s) {
   const st = s.status || "pending";
   if (state.assign.on) {
@@ -435,7 +438,7 @@ function makeIcon(s) {
   const mine = isMine(s);
   return L.divIcon({
     className: "",
-    html: `<div class="pin ${dcls(s)}${mine ? " mine" : ""}"><span>${esc(s.num ?? "")}</span></div>`,
+    html: `<div class="pin ${dcls(s)}${mine ? " mine" : ""}"><span>${esc(s.num ?? "")}</span></div>${needsPickupTask(s) ? PICKUP_DOT : ""}`,
     iconSize: [30, 40], iconAnchor: [15, 40],
   });
 }
@@ -447,7 +450,7 @@ function renderMarkers() {
   for (const s of state.signs) {
     if (!vis.has(s.id)) continue;
     const a = state.assign;
-    const key = `${s.status}|${s.num}|${s.lat}|${s.lng}|${isMine(s)}` +
+    const key = `${s.status}|${s.num}|${s.lat}|${s.lng}|${isMine(s)}|${needsPickupTask(s)}` +
       (a.on ? `|A|${a.job}|${a.sel.has(s.id)}|${s[JOB_FIELD[a.job]] || ""}` : "");
     let m = gm.markers.get(s.id);
     if (m && m._key === key) continue;
