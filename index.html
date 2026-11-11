@@ -96,9 +96,9 @@
         <div id="pickBanner" class="pick-banner hidden">Tap the map where the sign goes <button id="pickCancel" class="btn small light" type="button">Cancel</button></div>
         <div id="mapCard" class="map-card hidden"></div>
         <div class="legend">
+          <span><i class="dot retrieved"></i>Potential</span>
           <span><i class="dot pending"></i>To drop off</span>
           <span><i class="dot placed"></i>Dropped off</span>
-          <span><i class="dot retrieved"></i>Picked up</span>
         </div>
       </section>
 
@@ -114,9 +114,9 @@
           </div>
           <select id="statusFilter" aria-label="Filter by status">
             <option value="all">Any status</option>
+            <option value="potential">Potential locations</option>
             <option value="pending">To drop off</option>
             <option value="placed">Dropped off (to pick up)</option>
-            <option value="retrieved">Picked up</option>
           </select>
           <select id="sortSel" aria-label="Sort">
             <option value="num">By number</option>
@@ -278,7 +278,7 @@
         <input id="apNew" placeholder="Someone new? Type their name" list="memberNames">
         <button id="apAdd" class="btn primary" type="button">Assign</button>
       </div>
-      <button id="apUnassign" class="btn danger" type="button">Unassign (send to Last Call Stragglers)</button>
+      <button id="apUnassign" class="btn danger" type="button">Unassign</button>
       <button id="apCancel" class="btn ghost" type="button">Cancel</button>
     </div>
   </div>
