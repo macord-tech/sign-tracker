@@ -36,7 +36,6 @@ window.APP_CONFIG = {
     "Deep snow or snowbank",
     "Snowplow route",
     "Ditch or steep drop",
-    "Overhead power lines",
     "Poor lighting at night",
     "Uneven ground",
     "Construction nearby",
