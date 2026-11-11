@@ -276,7 +276,7 @@ function render() {
   if (!isAdmin()) {
     $("#memberNames").innerHTML = allVolunteerNames().map((n) => `<option value="${esc(n)}">`).join("");
   }
-  if (!fittedOnce && gm.map && state.signs.length) { fittedOnce = true; fitToVisible(); }
+  if (cfg.fitToSignsOnOpen && !fittedOnce && gm.map && state.signs.length) { fittedOnce = true; fitToVisible(); }
   if (isAdmin() && !$("#admin").classList.contains("hidden")) renderAdminLists();
 }
 
@@ -379,7 +379,7 @@ function initMap() {
     select(null);
   });
   renderMarkers();
-  fitToVisible();
+  if (cfg.fitToSignsOnOpen) fitToVisible();
 }
 
 function showMapMsg(html) { const m = $("#mapMsg"); m.innerHTML = `<div>${html}</div>`; m.classList.remove("hidden"); }
