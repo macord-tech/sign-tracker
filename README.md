@@ -1,18 +1,18 @@
 # Sign Tracker
 
-A shared, live map of temporary sign locations. Coordinators add the addresses and assign each sign to a volunteer. Volunteers open the link on their phone, follow the map, and tap **Mark placed** at each drop-off, then **Mark retrieved** on pickup day. Everyone sees changes as they happen.
+A shared, live map of temporary sign locations. Coordinators add the addresses and assign each sign to a volunteer. Volunteers open the link on their phone, follow the map, and tag each location **Sign dropped off**. Later the coordinator tasks each sign for pickup, and the pickup volunteer tags it **Sign picked up**. Everyone sees changes as they happen.
 
 - **Hosting:** GitHub Pages (free)
 - **Map and address lookup:** OpenStreetMap (free, no key)
 - **Directions:** each sign's **Directions** button opens Google Maps navigation on the phone (free, no key)
 - **Live shared data:** Google Firebase on the free **Spark** plan
-- **No accounts:** volunteers type their name and a shared access code
+- **No accounts:** each volunteer signs in with a personal code (last 4 digits of their phone + CSP)
 
 Built for ski patrol: red and white in light view, dark grey and red in dark view. Tap the sun/moon button to switch. Each phone remembers its own choice.
 
 **No payment information is needed anywhere.** You won't be asked for a card unless you click "Upgrade" in Firebase. Don't do that, because the free plan is plenty for this.
 
-You can open `index.html` from a local web server before setting anything up. It runs in **demo mode**, where data stays in that browser only. Use the code `admin` to see the coordinator tools.
+You can open `index.html` from a local web server before setting anything up. It runs in **demo mode**, where data stays in that browser only. Use the code `CSPadmin` for the coordinator tools, or the sample volunteer code `0142CSP`.
 
 ---
 
@@ -31,14 +31,9 @@ You can open `index.html` from a local web server before setting anything up. It
 ### 3. Create the database
 1. Go to **Build → Firestore Database → Create database**. Pick a location near you (for example `northamerica-northeast1`) and start in **production mode**.
 2. Open the **Rules** tab, replace everything with the contents of **`firestore.rules`**, and click **Publish**.
-3. Open the **Data** tab and click **Start collection**:
-   - Collection ID: `private`
-   - Document ID: `settings`
-   - Add field `adminCode` (string): `CSPadmin`. This is the coordinator master code (capital letters don't matter).
+3. The coordinator code **CSPadmin** is set inside the rules, in the line `function adminCode() { return 'CSPadmin'; }`. Security rules can't be read from the app, so it stays private. To change it, edit that line and click **Publish** again. Capital letters don't matter when signing in.
 
-   Nobody can read this code from the app, and you can change it here at any time. People already signed in stay signed in.
-
-   Volunteer codes aren't set here. They're created in the app when a coordinator adds each volunteer (see **Volunteers & access codes** below).
+   Volunteer codes are created in the app when a coordinator adds each volunteer (see **Volunteers & access codes** below).
 
 ### 4. Set your area in `config.js`
 Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) and `countryCodes` (e.g. `"ca"`) so short addresses like "123 Main St" are found in the right city.
@@ -57,7 +52,7 @@ Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) a
 
 ### Emergency and Safety tabs
 - **Emergency:** your contact list, with **Call** and **Text** buttons for each person. Coordinators tap **Edit contacts** to add names, roles and phone numbers.
-- **Safety:** your safety notes for placing and collecting signs. Coordinators tap **Edit safety notes**, and can start from the **starter template**. Formatting is simple: start a line with `#` for a heading, `-` for a bullet, or `!` for a red warning box.
+- **Safety:** your safety notes for dropping off and picking up signs. Coordinators tap **Edit safety notes**, and can start from the **starter template**. Formatting is simple: start a line with `#` for a heading, `-` for a bullet, or `!` for a red warning box.
 - When the safety notes change, volunteers see a red dot on the Safety tab until they read them.
 - Both pages are saved on each phone after they're opened once, so they still work without cell signal. Ask volunteers to open both tabs before heading out.
 
@@ -70,7 +65,7 @@ Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) a
 ### Volunteers & access codes (coordinator)
 1. Open **Manage → Volunteers & access codes**.
 2. Type the volunteer's name and phone number, then tap **Add**. Their code appears straight away.
-3. **Text code** opens a text message to them with their code and the link. **Call** rings them.
+3. **Text code** opens a text message to them with their code and the link, and also copies the message in case your device can't open Messages. **Copy** just copies it, to paste into any app. **Call** rings them. Phone numbers must be complete (10 digits).
 4. If two volunteers share the same last 4 digits, the app warns you. Use a different phone number (e.g. a landline) for one of them.
 5. **×** removes a volunteer. Their code stops working for new sign-ins, but their sign assignments stay.
 6. Names that appear on signs but have no code yet are listed below. Tap one to fill it in, then add their phone.
@@ -93,21 +88,28 @@ Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) a
    - To reassign someone's signs, open their name under **Assigned for…** and tap **Select**.
    - **Unassign** sends signs back to Last Call Stragglers.
    - To give a sign to two people, type both names: `Sam Wu, Pat Lee`.
-5. The **Volunteers** table shows each person's progress. **Download CSV** exports everything, with who placed and retrieved each sign and when.
-6. To reuse the same signs for another event, use **Reset all to "To place"**.
+5. The **Volunteers** table shows each person's progress. **Download CSV** exports everything, with who dropped off and picked up each sign and when.
+6. **Locations stay after pickup** until a coordinator deletes them (only coordinators can delete). To use a location again, tap **↺ Use location again** on its card, or select it in Assign mode (Drop-off) and assign a volunteer. **Reset all to "To drop off"** does this for every location at once.
+
+### The sign cycle
+1. **To drop off** (orange): the coordinator creates the location and assigns a drop-off volunteer.
+2. **Sign dropped off** (green): tagged by the drop-off volunteer, the pickup volunteer, or a coordinator.
+3. **Tasked for pickup:** the coordinator assigns a pickup volunteer in Assign mode (Pickup). This can happen before or after drop-off.
+4. **Picked up** (grey): tagged by the pickup volunteer or a coordinator, and **only after the sign has been tagged dropped off**.
+5. The location stays on the map for next time.
 
 ### Adding a new sign location (anyone)
 1. Tap **+ New sign** on the map, or **+ New sign location** at the top of the list.
 2. Set the spot in one of three ways: **Drop pin on map**, **Use my location** (stand where the sign goes), or type an address and tap **Find**. Use **Move pin** to adjust it.
 3. Check the address (it's filled in automatically when you drop a pin) and describe the exact spot.
 4. Tick the **hazards** in the immediate area, and add any others in the box.
-5. The sign is assigned to you unless you change the name. Tick **I've already placed this sign** if it's already in the ground.
+5. The sign is assigned to you unless you change the name. Tick **I've already dropped off this sign** if it's already in the ground.
 6. **Save sign.** It appears on everyone's map straight away, with its hazards shown on the sign's card.
 
-Volunteers can edit or delete signs they added themselves. Coordinators can edit or delete any sign. To change the hazard checklist, edit `hazardOptions` in `config.js`.
+Volunteers can edit locations they added themselves. Only coordinators can delete a location. To change the hazard checklist, edit `hazardOptions` in `config.js`.
 
 ### Heading to the next sign
-- The **Next sign** panel at the top of the map shows the address of your next stop in large text. On drop-off day that's your nearest sign still to place, and on pickup day your nearest sign still to collect.
+- The **Next sign** panel at the top of the map shows the address of your next stop in large text. On drop-off day that's your nearest location still to drop off. On pickup day it's your nearest sign still to collect, once it's been tagged dropped off.
 - Tap **Navigate** to open directions in your choice of **Apple Maps**, **Google Maps**, **Waze**, or on Android your **phone's default map app**. You can also copy the address.
 - Tick **Always use the app I pick** and Navigate goes straight there next time. **Change** switches apps.
 - **Skip** moves to the next-nearest sign. The × hides the panel.
@@ -117,21 +119,21 @@ Volunteers can edit or delete signs they added themselves. Coordinators can edit
 1. Open the link (tip: **Share → Add to Home Screen** makes it feel like an app).
 2. Enter your code: the last 4 digits of your phone number + CSP, e.g. **0142CSP**.
 3. **My signs** shows only your signs. Tap **Directions** to navigate in Google Maps.
-4. At each spot, tap **Mark placed**. The pin turns from orange to green for everyone.
-5. On pickup day, tap **Mark retrieved** at each sign. The pin turns grey.
+4. At each spot, tap **✓ Sign dropped off**. The pin turns from orange to green for everyone.
+5. On pickup day, tap **✓ Sign picked up** at each sign you've been tasked with. The pin turns grey. If a sign you're picking up hasn't been tagged dropped off yet, check it's there and tag it dropped off first.
 6. Mistapped? Use **Undo**.
 7. **Nearest first** sorts your list by distance from where you are. The target button on the map shows your location.
 
-When you mark your last sign placed (or, on pickup day, your last sign retrieved), you'll get confetti and a **Thank you for your service!** message.
+When you tag your last sign dropped off (or, on pickup day, your last sign picked up), you'll get confetti and a **Thank you for your service!** message.
 
 If there's no signal, keep going. Taps are saved on the phone and sync automatically when the connection returns. The yellow badge shows when that is happening.
 
 ### Pin colours
 | Colour | Meaning |
 |---|---|
-| Orange | To place |
-| Green | Placed (waiting for pickup) |
-| Grey | Retrieved |
+| Orange | To drop off |
+| Green | Sign dropped off (waiting for pickup) |
+| Grey | Picked up |
 
 Pins with a dark outline are assigned to you.
 
@@ -149,11 +151,11 @@ Pins with a dark outline are assigned to you.
 | `firestore.rules` | Database security rules to paste into Firebase |
 
 ## Troubleshooting
-- **Coordinator code not recognised**: check that `private/settings` exists with the field `adminCode` = `CSPadmin`, and that the latest rules are published.
+- **Coordinator code not recognised**: check that the latest `firestore.rules` is published in Firebase (the code is set in its `adminCode()` line).
 - **Volunteer code "isn't on the volunteer list"**: the coordinator needs to add them under **Manage → Volunteers & access codes**, with the right phone number.
 - **Stuck on "Connecting…" or a sign-in error**: Anonymous sign-in isn't enabled, or your `github.io` domain isn't in Authorized domains.
 - **Addresses not found**: the free lookup is less forgiving than Google's. Include the street type (St, Ave, Rd), set `addressSuffix` and `countryCodes` in `config.js`, or use **Drop pin on map** when adding the sign.
 - **A volunteer sees "No signs assigned"**: assign signs to them in **Assign** mode. Pick their name from the list so it matches their volunteer entry exactly.
 
 ## A note on the codes
-Codes made from phone digits are easy to remember, but they're not strong passwords: anyone who knows a volunteer's phone number could sign in as them. A signed-in volunteer can see the signs, add new sign locations, and mark signs placed or retrieved. Only the CSPadmin code can change assignments or see phone numbers. Keep CSPadmin to coordinators, and change it in Firebase after each event if you like.
+Codes made from phone digits are easy to remember, but they're not strong passwords: anyone who knows a volunteer's phone number could sign in as them. A signed-in volunteer can see the signs, add new drop-off locations, and tag their assigned signs dropped off or picked up. Only the CSPadmin code can change assignments or see phone numbers. Keep CSPadmin to coordinators, and change it in the rules after each event if you like.
