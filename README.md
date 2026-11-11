@@ -50,6 +50,8 @@ Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) a
 
 ## Using it
 
+Tap the **?** button at the top of the app for a short how-to. Volunteers see the volunteer guide; coordinators see both. (Psst: tap the logo 5 times for a break between signs.)
+
 ### Emergency and Safety tabs
 - **Emergency:** your contact list, with **Call** and **Text** buttons for each person. Coordinators tap **Edit contacts** to add names, roles and phone numbers.
 - **Safety:** your safety notes for dropping off and picking up signs. Coordinators tap **Edit safety notes**, and can start from the **starter template**. Formatting is simple: start a line with `#` for a heading, `-` for a bullet, or `!` for a red warning box.
@@ -149,6 +151,7 @@ Pins with a dark outline are assigned to you.
 | `index.html` | Page layout |
 | `styles.css` | Look and feel (mobile-first) |
 | `app.js` | Map, list, buttons and coordinator tools |
+| `help.js` | In-app volunteer and coordinator guides, and the hidden Patrol Run game |
 | `store.js` | Saving and live updates (Firebase, or demo mode) |
 | `config.js` | **Your settings: the only file you need to edit** |
 | `logo.png`, `icon-180.png`, `favicon.png` | Winter Extreme logo, home-screen icon and browser-tab icon. Replace them with files of the same names to change the branding |
