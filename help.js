@@ -71,6 +71,18 @@
     <li>No signal? Keep going. Your taps save and sync when you're back online.</li>
     <li>The <b>Emergency</b> tab has your contacts.</li>
     <li>The sun/moon button switches light and dark view.</li></ul>
+
+    <h3>Add the app to your home screen</h3>
+    <p style="margin:0 0 6px">Open it like a regular app, full screen, with one tap.</p>
+    <b>iPhone / iPad (Safari)</b>
+    <ol><li>Open the app link in <b>Safari</b>.</li>
+    <li>Tap the <b>Share</b> button (square with an up arrow).</li>
+    <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>
+    <b>Android (Chrome)</b>
+    <ol><li>Open the app link in <b>Chrome</b>.</li>
+    <li>Tap the <b>⋮</b> menu (top right).</li>
+    <li>Tap <b>Add to Home screen</b> (or <b>Install app</b>), then <b>Add</b>.</li></ol>
+    <p style="margin:6px 0 0">Look for the Winter Extreme icon on your home screen.</p>
     <div class="tip">Safety first: park legally, wear your vest, and never place a sign where it blocks a driver's view.</div>`;
 
   const ADM = `
@@ -112,6 +124,18 @@
     <ul><li>The <b>List</b> tab filters by status. <b>Manage</b> shows each volunteer's progress.</li>
     <li><b>Download CSV</b> exports who did what and when.</li>
     <li>Locations stay after pickup. Next year use <b>↺ Use location again</b>, or <b>Reset all to "To drop off"</b>.</li></ul>
+
+    <h3>Add the app to your home screen</h3>
+    <p style="margin:0 0 6px">Open it like a regular app, full screen, with one tap.</p>
+    <b>iPhone / iPad (Safari)</b>
+    <ol><li>Open the app link in <b>Safari</b>.</li>
+    <li>Tap the <b>Share</b> button (square with an up arrow).</li>
+    <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>
+    <b>Android (Chrome)</b>
+    <ol><li>Open the app link in <b>Chrome</b>.</li>
+    <li>Tap the <b>⋮</b> menu (top right).</li>
+    <li>Tap <b>Add to Home screen</b> (or <b>Install app</b>), then <b>Add</b>.</li></ol>
+    <p style="margin:6px 0 0">Look for the Winter Extreme icon on your home screen.</p>
     <div class="tip">Volunteers lose their code? It's always the last 4 digits of their phone + CSP.</div>`;
 
   // ---------- help button + modal ----------
@@ -231,8 +255,15 @@
     }
     function spawn() {
       const r = Math.random(), x = 20 + Math.random() * (W - 40);
-      if (r < 0.62) g.things.push({ k: "tree", x, y: H + 40, s: 0.8 + Math.random() * 0.6 });
-      else if (r < 0.80) g.things.push({ k: "rock", x, y: H + 30 });
+      if (r < 0.55) g.things.push({ k: "tree", x, y: H + 40, s: 0.8 + Math.random() * 0.6 });
+      else if (r < 0.70) g.things.push({ k: "rock", x, y: H + 30 });
+      else if (r < 0.77) g.things.push({ k: "coffee", x, y: H + 30 });
+      else if (r < 0.82 && g.t > 4 && !g.things.some((o) => o.k === "dog")) {
+        // patrol dog trots across, timed to cross the middle about when it reaches you
+        const t = (H + 30 - g.y) / g.speed, dir = Math.random() < 0.5 ? 1 : -1;
+        const startX = dir > 0 ? -30 : W + 30, targetX = W * (0.3 + Math.random() * 0.4);
+        g.things.push({ k: "dog", x: startX, y: H + 30, vx: (targetX - startX) / t, ph: 0 });
+      }
       else if (r < 0.92) { const gw = 90; const gx = Math.max(30, Math.min(W - 30 - gw, x)); g.things.push({ k: "gate", x: gx, w: gw, y: H + 30, hit: false }); }
       else g.things.push({ k: "kit", x, y: H + 30 });
     }
@@ -244,14 +275,18 @@
       g.x = Math.max(12, Math.min(W - 12, g.x + g.vx * dt));
       const dy = g.speed * dt; g.dist += dy / 20;
       g.spawn -= dy; if (g.spawn <= 0) { spawn(); g.spawn = 70 + Math.random() * Math.max(40, 160 - g.t * 3); }
-      for (const o of g.things) o.y -= dy;
+      for (const o of g.things) { o.y -= dy; if (o.k === "dog") { o.x += o.vx * dt; o.ph += dt * 12; } }
       g.things = g.things.filter((o) => o.y > -60);
       for (const o of g.things) {
         if (o.k === "gate") {
-          if (!o.hit && o.y < g.y && o.y + dy >= g.y) { o.hit = true; if (g.x > o.x + 6 && g.x < o.x + o.w - 6) { g.bonus += 50; g.flash = 0.5; } }
+          if (!o.hit && o.y < g.y && o.y + dy >= g.y) { o.hit = true; if (g.x > o.x + 6 && g.x < o.x + o.w - 6) { g.bonus += 50; g.flash = 0.5; g.flashText = "+50 gate!"; } }
           if ((Math.abs(g.x - o.x) < 8 || Math.abs(g.x - (o.x + o.w)) < 8) && Math.abs(o.y - g.y) < 10) die("You clipped a gate pole.");
         } else if (o.k === "kit") {
-          if (!o.got && Math.abs(o.x - g.x) < 18 && Math.abs(o.y - g.y) < 18) { o.got = true; g.bonus += 100; g.flash = 0.6; }
+          if (!o.got && Math.abs(o.x - g.x) < 18 && Math.abs(o.y - g.y) < 18) { o.got = true; g.bonus += 100; g.flash = 0.6; g.flashText = "+100 first aid!"; }
+        } else if (o.k === "coffee") {
+          if (!o.got && Math.abs(o.x - g.x) < 18 && Math.abs(o.y - g.y) < 20) { o.got = true; g.bonus += 150; g.flash = 0.7; g.flashText = "+150 coffee! ☕"; }
+        } else if (o.k === "dog") {
+          if (Math.abs(o.x - g.x) < 20 && Math.abs(o.y - g.y) < 14) die("You tripped over the patrol dog. He's fine, just wants pets!");
         } else {
           const rad = o.k === "tree" ? 11 * o.s : 12;
           const oy = o.k === "tree" ? o.y + 6 * o.s : o.y;
@@ -285,6 +320,29 @@
       for (let i = 0; i < 3; i++) { const w = (14 - i * 3) * s, ty = y - 14 * s + i * 7 * s; ctx.beginPath(); ctx.moveTo(x, ty - 6 * s); ctx.lineTo(x - w, ty + 10 * s); ctx.lineTo(x + w, ty + 10 * s); ctx.closePath(); ctx.fill(); }
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(x, y - 20 * s); ctx.lineTo(x - 4 * s, y - 14 * s); ctx.lineTo(x + 4 * s, y - 14 * s); ctx.fill();
     }
+    function drawCoffee(x, y) {
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = "#5d4037"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - 8, y - 8); ctx.lineTo(x + 8, y - 8); ctx.lineTo(x + 6, y + 10); ctx.lineTo(x - 6, y + 10); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#d32f2f"; ctx.fillRect(x - 9, y - 12, 18, 4); // lid
+      ctx.fillStyle = "#8d6e63"; ctx.fillRect(x - 7, y - 1, 14, 5); // sleeve
+      ctx.strokeStyle = "rgba(120,120,120,.6)"; ctx.lineWidth = 1.5; const w = Math.sin(performance.now() / 200) * 2;
+      ctx.beginPath(); ctx.moveTo(x - 3, y - 14); ctx.quadraticCurveTo(x - 6 + w, y - 19, x - 3, y - 24); ctx.moveTo(x + 3, y - 14); ctx.quadraticCurveTo(x + w, y - 19, x + 3, y - 24); ctx.stroke(); // steam
+    }
+    function drawDog(o) {
+      const d = o.vx >= 0 ? 1 : -1, leg = Math.sin(o.ph) * 4;
+      ctx.save(); ctx.translate(o.x, o.y); ctx.scale(d, 1);
+      ctx.strokeStyle = "#b07a1e"; ctx.lineWidth = 3; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(-10, 4); ctx.lineTo(-10 + leg, 13); ctx.moveTo(-5, 4); ctx.lineTo(-5 - leg, 13); ctx.moveTo(7, 4); ctx.lineTo(7 + leg, 13); ctx.moveTo(11, 4); ctx.lineTo(11 - leg, 13); ctx.stroke(); // legs
+      ctx.beginPath(); ctx.moveTo(-15, -2); ctx.quadraticCurveTo(-24, -10 + leg, -21, -14); ctx.stroke(); // tail
+      ctx.fillStyle = "#e0a63a"; ctx.beginPath(); ctx.ellipse(0, 0, 16, 8, 0, 0, 7); ctx.fill(); // body
+      ctx.fillStyle = "#d32f2f"; ctx.fillRect(-8, -7, 15, 12); // red vest
+      ctx.fillStyle = "#fff"; ctx.fillRect(-2, -5, 3, 8); ctx.fillRect(-4.5, -2.5, 8, 3); // white cross
+      ctx.fillStyle = "#e0a63a"; ctx.beginPath(); ctx.ellipse(17, -7, 7, 6, 0, 0, 7); ctx.fill(); // head
+      ctx.beginPath(); ctx.ellipse(23, -5, 4, 3, 0, 0, 7); ctx.fill(); // snout
+      ctx.fillStyle = "#b07a1e"; ctx.beginPath(); ctx.ellipse(14, -5, 3, 5, 0.3, 0, 7); ctx.fill(); // ear
+      ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(26.5, -5.5, 1.6, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(19, -9, 1.2, 0, 7); ctx.fill(); // nose, eye
+      ctx.restore();
+    }
     function drawSkier() {
       const x = g.x, y = g.y, lean = Math.max(-0.5, Math.min(0.5, g.vx / 500));
       ctx.save(); ctx.translate(x, y);
@@ -308,11 +366,14 @@
         if (o.k === "tree") drawTree(o.x, o.y, o.s);
         else if (o.k === "rock") { ctx.fillStyle = "#78909c"; ctx.beginPath(); ctx.ellipse(o.x, o.y, 13, 8, 0, 0, 7); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(o.x - 2, o.y - 4, 8, 3, 0, 0, 7); ctx.fill(); }
         else if (o.k === "gate") { for (const px of [o.x, o.x + o.w]) { ctx.fillStyle = "#37474f"; ctx.fillRect(px - 1.5, o.y - 22, 3, 24); ctx.fillStyle = o.hit ? "#bdbdbd" : "#d32f2f"; ctx.fillRect(px + 1.5, o.y - 22, 12, 9); } }
+        else if (o.k === "coffee" && !o.got) drawCoffee(o.x, o.y);
+        else if (o.k === "dog") drawDog(o);
         else if (o.k === "kit" && !o.got) { ctx.fillStyle = "#fff"; ctx.strokeStyle = "#d32f2f"; ctx.lineWidth = 2; ctx.fillRect(o.x - 10, o.y - 8, 20, 16); ctx.strokeRect(o.x - 10, o.y - 8, 20, 16); ctx.fillStyle = "#d32f2f"; ctx.fillRect(o.x - 2, o.y - 6, 4, 12); ctx.fillRect(o.x - 6, o.y - 2, 12, 4); }
       }
       drawSkier();
-      if (g.flash > 0) { ctx.fillStyle = `rgba(46,158,68,${g.flash})`; ctx.font = "800 18px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("+ bonus!", g.x, g.y - 30); }
-      if (g.t < 3 && !g.dead) { ctx.fillStyle = "rgba(31,41,51,.75)"; ctx.font = "600 15px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("Drag or use ← → · Go through red gates · Grab first-aid kits", W / 2, H - 40); }
+      if (g.flash > 0) { ctx.fillStyle = `rgba(46,158,68,${g.flash})`; ctx.font = "800 18px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText(g.flashText || "+ bonus!", g.x, g.y - 30); }
+      if (g.t < 3.5 && !g.dead) { ctx.fillStyle = "rgba(31,41,51,.75)"; ctx.font = "600 15px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("Watch out for the patrol dog!", W / 2, H - 62); }
+      if (g.t < 3.5 && !g.dead) { ctx.fillStyle = "rgba(31,41,51,.75)"; ctx.font = "600 15px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("Drag or ← → · Gates, first-aid kits & coffee = points", W / 2, H - 40); }
       scoreEl.textContent = `${score()} pts`;
       if (!g.dead && leader) showLeader();
     }
