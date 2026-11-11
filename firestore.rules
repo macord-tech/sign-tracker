@@ -101,6 +101,14 @@ service cloud.firestore {
             && resource.data.get('pickupAssignee', '') == ''
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pickupAssignee', 'updatedAt', 'updatedBy'])
             && request.resource.data.pickupAssignee == get(/databases/$(db)/documents/members/$(request.auth.uid)).data.name)
+        // a volunteer can claim the drop-off of a potential location (no drop-off volunteer, or already picked up), in their own name
+        || (isMember()
+            && ((resource.data.status == 'pending' && resource.data.get('assignee', '') == '') || resource.data.status == 'retrieved')
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['assignee', 'pickupAssignee', 'status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt', 'updatedAt', 'updatedBy'])
+            && request.resource.data.status == 'pending'
+            && request.resource.data.get('pickupAssignee', '') == ''
+            && request.resource.data.assignee == get(/databases/$(db)/documents/members/$(request.auth.uid)).data.name)
         // volunteers can tag dropped off / picked up (the app limits this to the assigned volunteers)
         || (isMember() && pickupOk()
             && request.resource.data.diff(resource.data).affectedKeys()
