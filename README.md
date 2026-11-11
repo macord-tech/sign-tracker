@@ -151,7 +151,7 @@ Pins with a dark outline are assigned to you.
 | `index.html` | Page layout |
 | `styles.css` | Look and feel (mobile-first) |
 | `app.js` | Map, list, buttons and coordinator tools |
-| `help.js` | In-app volunteer and coordinator guides, and the hidden Patrol Run game |
+| `help.js` | In-app volunteer and coordinator guides, and the hidden Patrol Run game (shared high score) |
 | `store.js` | Saving and live updates (Firebase, or demo mode) |
 | `config.js` | **Your settings: the only file you need to edit** |
 | `logo.png`, `icon-180.png`, `favicon.png` | Winter Extreme logo, home-screen icon and browser-tab icon. Replace them with files of the same names to change the branding |
