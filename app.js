@@ -232,6 +232,9 @@ async function onCardClick(e) {
       upd({ status: "retrieved", retrievedBy: who, retrievedAt: "NOW" }, `#${sign.num} tagged: picked up ✓`); maybeCelebrate("retrieved", id); break;
     case "undo-place": if (confirm(`Undo "sign dropped off" for #${sign.num}?`)) upd({ status: "pending", placedBy: null, placedAt: null }, "Undone"); break;
     case "undo-retrieve": if (confirm(`Undo "picked up" for #${sign.num}?`)) upd({ status: "placed", retrievedBy: null, retrievedAt: null }, "Undone"); break;
+    case "claim-pickup":
+      if (!needsPickupTask(sign)) { toast(`${sign.pickupAssignee || "Someone"} is already picking this one up.`, 4000); break; }
+      upd({ pickupAssignee: who }, `You're picking up #${sign.num} ✓`); break;
     case "place-again":
       if (confirm(`Use this location again? #${sign.num} goes back to "To drop off"${sign.assignee ? ` for ${sign.assignee}` : ""}. Its drop-off/pickup times and pickup volunteer are cleared. You can change who drops it off in Assign mode.`))
         upd(RESET_TO_PLACE, `#${sign.num} is back to "To drop off"`);
@@ -342,7 +345,10 @@ function cardHTML(s, inMap = false) {
     if (mineFor(s, "pickup") && !mineFor(s, "drop")) hint = "You're picking this one up. It has to be tagged dropped off first: tag it yourself once you see the sign there.";
   } else if (st === "placed") {
     if (canTagPicked(s)) main = `<button class="btn retrieve" data-act="retrieve" data-id="${s.id}">✓ Sign picked up</button>`;
-    else if (!s.pickupAssignee && mineFor(s, "drop")) hint = "Dropped off. Waiting for an admin to task it for pickup.";
+    else if (needsPickupTask(s)) {
+      main = `<button class="btn retrieve" data-act="claim-pickup" data-id="${s.id}">🙋 I'll pick this up</button>`;
+      hint = "Nobody is picking this sign up yet. Tap the button to take it on.";
+    }
   }
   const undo = st === "placed" && canTagDropped(s) ? `<button class="btn link" data-act="undo-place" data-id="${s.id}">Undo dropped off</button>`
     : st === "retrieved" ? `${isAdmin() ? `<button class="btn light" data-act="place-again" data-id="${s.id}">↺ Use location again</button>` : ""}${isAdmin() || mineFor(s, "pickup") ? `<button class="btn link" data-act="undo-retrieve" data-id="${s.id}">Undo picked up</button>` : ""}` : "";
