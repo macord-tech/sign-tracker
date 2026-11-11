@@ -95,7 +95,7 @@ Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) a
 1. **Potential location** (grey): the coordinator creates the location. Nobody is tasked yet.
 2. **To drop off** (orange): the coordinator assigns a drop-off volunteer in Assign mode (Drop-off).
 3. **Sign dropped off** (green): tagged by the drop-off volunteer or a coordinator.
-4. **Tasked for pickup:** the coordinator assigns a pickup volunteer in Assign mode (Pickup). **This is only possible once the sign is tagged dropped off.**
+4. **Tasked for pickup:** the coordinator assigns a pickup volunteer in Assign mode (Pickup), or a volunteer claims it with **🙋 I'll pick this up**. **This is only possible once the sign is tagged dropped off.** Until then the pin shows a small red dot.
 5. **Picked up:** tagged by the pickup volunteer or a coordinator. The location goes back to grey **Potential location**, ready for next time.
 
 If a drop-off never happens, unassign it in Assign mode (Drop-off → select → Assign to… → **Unassign**). The location goes back to grey **Potential location**.
@@ -123,6 +123,7 @@ Volunteers can edit locations they added themselves. Only coordinators can delet
 3. **My signs** shows only your signs. Tap **Directions** to navigate in Google Maps.
 4. At each spot, tap **✓ Sign dropped off**. The pin turns from orange to green for everyone.
 5. On pickup day, tap **✓ Sign picked up** at each sign you've been tasked with. The pin turns grey.
+   - Pins with a **small red dot** are dropped off but nobody is picking them up. Open one and tap **🙋 I'll pick this up** to take it on yourself.
 6. Mistapped? Use **Undo**.
 7. **Nearest first** sorts your list by distance from where you are. The target button on the map shows your location.
 
