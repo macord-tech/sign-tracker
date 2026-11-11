@@ -5,6 +5,18 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 const STATUS_LABEL = { pending: "To drop off", placed: "Sign dropped off", retrieved: "Picked up" };
+// What a location looks like on the map/list:
+//  potential = no drop-off volunteer yet, or its sign has been picked up (grey)
+//  pending   = a volunteer is tasked to drop it off (orange)
+//  placed    = sign dropped off (green)
+const DISP_LABEL = { potential: "Potential location", pending: "To drop off", placed: "Sign dropped off" };
+const DISP_CLASS = { potential: "retrieved", pending: "pending", placed: "placed" };
+function dispState(s) {
+  if (s.status === "placed") return "placed";
+  if (s.status === "retrieved") return "potential";
+  return splitNames(s.assignee).length ? "pending" : "potential";
+}
+const dcls = (s) => DISP_CLASS[dispState(s)];
 const COLORS = { pending: "var(--pending)", placed: "var(--placed)", retrieved: "var(--retrieved)" };
 
 const state = {
@@ -32,10 +44,11 @@ const splitNames = (v) => String(v || "").split(/\s*(?:,|&|\/|\band\b)\s*/i).map
 function assigneesOf(sign, job = "drop") { return splitNames(sign[JOB_FIELD[job]]).map(norm); }
 function mineFor(sign, job) { return !!state.me && assigneesOf(sign, job).includes(norm(state.me.name)); }
 function isMine(sign) { return mineFor(sign, "drop") || mineFor(sign, "pickup"); }
-// Signs with nobody assigned for a job: drop-off = still to place; pickup = not yet retrieved
+// Signs with nobody assigned for a job: drop-off = potential locations not yet tasked;
+// pickup = signs tagged dropped off with nobody tasked to pick them up
 function stragglers(job) {
   return state.signs.filter((s) => !assigneesOf(s, job).length &&
-    (job === "drop" ? (s.status || "pending") === "pending" : s.status !== "retrieved"));
+    (job === "drop" ? (s.status || "pending") === "pending" : s.status === "placed"));
 }
 function isAdmin() { return state.me?.role === "admin"; }
 // Who can tag what:
@@ -247,7 +260,7 @@ function maybeCelebrate(newStatus, changedId) {
 function visibleSigns() {
   let list = state.signs.slice();
   if (state.scope === "mine") list = list.filter(isMine);
-  if (state.status !== "all") list = list.filter((s) => s.status === state.status);
+  if (state.status !== "all") list = list.filter((s) => dispState(s) === state.status);
   if (state.sort === "near" && state.userPos) {
     list.forEach((s) => (s._d = hasLoc(s) ? distM(state.userPos, s) : Infinity));
     list.sort((a, b) => a._d - b._d);
@@ -308,22 +321,24 @@ function renderProgress() {
     else if (myDrop.length && placedN(myDrop) === myDrop.length && !myPick.length) html += `<div class="done-msg">All your signs are dropped off. Thank you!</div>`;
   }
   if (isAdmin() || !mine.length) {
-    const all = state.signs;
-    html += `<h4>Everyone</h4>${bar("Dropped off", placedN(all), all.length, COLORS.placed)}${bar("Picked up", retrN(all), all.length, COLORS.retrieved)}`;
+    const all = state.signs, cnt = { potential: 0, pending: 0, placed: 0 };
+    all.forEach((s) => cnt[dispState(s)]++);
+    html += `<h4>Everyone</h4>${bar("Dropped off", cnt.placed, cnt.placed + cnt.pending, COLORS.placed)}
+      <div class="muted small" style="margin-top:6px"><i class="dot retrieved"></i>${cnt.potential} potential · <i class="dot pending"></i>${cnt.pending} to drop off · <i class="dot placed"></i>${cnt.placed} dropped off</div>`;
   }
   $("#progressBox").innerHTML = html || `<h4>Progress</h4><span class="muted small">No signs yet.</span>`;
 }
 
 function cardHTML(s, inMap = false) {
   const st = s.status || "pending";
-  let statusLine = `<b class="${st}">${STATUS_LABEL[st]}</b>`;
+  let statusLine = `<b class="${dcls(s)}">${DISP_LABEL[dispState(s)]}</b>`;
   if (s.placedAt) statusLine += ` · dropped off ${esc(fmtTime(s.placedAt))}${s.placedBy ? " by " + esc(s.placedBy) : ""}`;
   if (s.retrievedAt) statusLine += ` · picked up ${esc(fmtTime(s.retrievedAt))}${s.retrievedBy ? " by " + esc(s.retrievedBy) : ""}`;
   if (s._pending) statusLine += ` · <i>saving…</i>`;
   const dist = state.userPos && hasLoc(s) ? ` · ${fmtDist(distM(state.userPos, s))} away` : "";
   let main = "", hint = "";
   if (st === "pending") {
-    if (canTagDropped(s)) main = `<button class="btn place" data-act="place" data-id="${s.id}">✓ Sign dropped off</button>`;
+    if (canTagDropped(s) && dispState(s) === "pending") main = `<button class="btn place" data-act="place" data-id="${s.id}">✓ Sign dropped off</button>`;
     if (mineFor(s, "pickup") && !mineFor(s, "drop")) hint = "You're picking this one up. It has to be tagged dropped off first: tag it yourself once you see the sign there.";
   } else if (st === "placed") {
     if (canTagPicked(s)) main = `<button class="btn retrieve" data-act="retrieve" data-id="${s.id}">✓ Sign picked up</button>`;
@@ -335,10 +350,12 @@ function cardHTML(s, inMap = false) {
   <div class="sign ${state.selectedId === s.id && !inMap ? "sel" : ""}" id="${inMap ? "" : "card-" + s.id}">
     ${inMap ? `<button class="close-x" data-act="close" data-id="${s.id}" aria-label="Close">×</button>` : ""}
     <div class="sign-head">
-      <div class="num ${st}">${esc(s.num ?? "")}</div>
+      <div class="num ${dcls(s)}">${esc(s.num ?? "")}</div>
       <div style="min-width:0;flex:1">
         <div class="addr" data-act="show" data-id="${s.id}">${esc(s.address)}</div>
-        <div class="meta">Drop-off: ${s.assignee ? esc(s.assignee) : '<i class="unas">unassigned</i>'} · Pickup: ${s.pickupAssignee ? esc(s.pickupAssignee) : '<i class="unas">unassigned</i>'}${dist}</div>
+        <div class="meta">${dispState(s) === "potential" && s.status !== "retrieved" ? "No drop-off volunteer yet"
+          : `Drop-off: ${s.assignee ? esc(s.assignee) : '<i class="unas">unassigned</i>'}`}${s.status === "placed" || s.pickupAssignee
+          ? ` · Pickup: ${s.pickupAssignee ? esc(s.pickupAssignee) : '<i class="unas">not tasked yet</i>'}` : ""}${dist}</div>
         ${s.createdBy ? `<div class="meta small">Added by ${esc(s.createdBy)}</div>` : ""}
         ${hasLoc(s) ? "" : `<div class="warn">Not on map — address couldn't be located</div>`}
       </div>
@@ -402,7 +419,7 @@ function showMapMsg(html) { const m = $("#mapMsg"); m.innerHTML = `<div>${html}<
 // Drop-off: signs still to place, or already retrieved (they can be placed again).
 // Pickup: anything not yet retrieved.
 function assignable(s, job = state.assign.job) {
-  return job === "drop" ? (s.status || "pending") !== "placed" : s.status !== "retrieved";
+  return job === "drop" ? (s.status || "pending") !== "placed" : s.status === "placed";
 }
 const RESET_TO_PLACE = { status: "pending", placedBy: null, placedAt: null, retrievedBy: null, retrievedAt: null, pickupAssignee: "" };
 function makeIcon(s) {
@@ -418,7 +435,7 @@ function makeIcon(s) {
   const mine = isMine(s);
   return L.divIcon({
     className: "",
-    html: `<div class="pin ${st}${mine ? " mine" : ""}"><span>${esc(s.num ?? "")}</span></div>`,
+    html: `<div class="pin ${dcls(s)}${mine ? " mine" : ""}"><span>${esc(s.num ?? "")}</span></div>`,
     iconSize: [30, 40], iconAnchor: [15, 40],
   });
 }
@@ -529,7 +546,7 @@ function openSignSheet(s = null) {
   $("#ssTitle").textContent = s ? `Edit sign #${s.num}` : "New sign location";
   $("#ssAddress").value = s?.address || "";
   $("#ssDesc").value = s?.notes || "";
-  $("#ssAssignee").value = s ? (s.assignee || "") : state.me.name;
+  $("#ssAssignee").value = s ? (s.assignee || "") : (isAdmin() ? "" : state.me.name);
   $("#ssPickup").value = s?.pickupAssignee || "";
   $("#ssPickupWrap").classList.toggle("hidden", !isAdmin());
   const opts = hazardOptions(), have = s?.hazards || [];
@@ -827,7 +844,7 @@ $("#exportBtn").onclick = () => {
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [cols.join(",")].concat(
     state.signs.slice().sort((a, b) => (a.num || 0) - (b.num || 0)).map((s) =>
-      cols.map((c) => q(c.endsWith("At") ? fmtTime(s[c]) : c === "status" ? STATUS_LABEL[s.status] : c === "hazards" ? (s.hazards || []).join("; ") : s[c])).join(",")));
+      cols.map((c) => q(c.endsWith("At") ? fmtTime(s[c]) : c === "status" ? DISP_LABEL[dispState(s)] + (s.status === "retrieved" ? " (picked up)" : "") : c === "hazards" ? (s.hazards || []).join("; ") : s[c])).join(",")));
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
   a.download = `signs-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
@@ -1022,7 +1039,7 @@ function renderNext() {
           <span class="next-left">${n.left} left</span>
           <button class="next-x" data-act="hide-next" data-id="${s.id}" aria-label="Hide">×</button>
         </div>
-        <div class="next-addr" data-act="show" data-id="${s.id}"><span class="num ${s.status}">${esc(s.num ?? "")}</span><span>${esc(s.address)}</span></div>
+        <div class="next-addr" data-act="show" data-id="${s.id}"><span class="num ${dcls(s)}">${esc(s.num ?? "")}</span><span>${esc(s.address)}</span></div>
         <div class="next-meta">${[dist, s.hazards?.length ? `<span class="next-hz">⚠ ${s.hazards.length} hazard${s.hazards.length > 1 ? "s" : ""}</span>` : ""].filter(Boolean).join(" · ")}</div>
         <div class="next-actions">
           <button class="btn primary next-go" data-act="nav" data-id="${s.id}">
@@ -1068,7 +1085,7 @@ function openNav(s, forceChooser = false) {
   const pref = NAV_APPS.find((a) => a.id === getNavPref() && a.show());
   if (pref && !forceChooser) { launchNav(pref, s); return; }
   navSign = s;
-  $("#navAddr").innerHTML = `<span class="num ${s.status}">${esc(s.num ?? "")}</span> ${esc(s.address)}`;
+  $("#navAddr").innerHTML = `<span class="num ${dcls(s)}">${esc(s.num ?? "")}</span> ${esc(s.address)}`;
   $("#navOpts").innerHTML = NAV_APPS.filter((a) => a.show()).map((a) =>
     `<button class="btn nav-opt ${a.id === getNavPref() ? "current" : ""}" data-app="${a.id}" type="button">${esc(a.name)}</button>`).join("");
   $("#navRemember").checked = !!getNavPref();
@@ -1176,7 +1193,12 @@ function exitAssign() {
 function toggleSel(id) {
   const s = state.signs.find((x) => x.id === id);
   if (!s) return;
-  if (!assignable(s)) { toast(state.assign.job === "drop" ? `#${s.num} is dropped off now. Task it for pickup instead.` : `#${s.num} is already picked up`, 4000); return; }
+  if (!assignable(s)) {
+    toast(state.assign.job === "drop" ? `#${s.num} is dropped off now. Task it for pickup instead.`
+      : s.status === "retrieved" ? `#${s.num} is already picked up.`
+      : `#${s.num} hasn't been dropped off. Pickup can only be assigned once it's tagged dropped off.`, 4500);
+    return;
+  }
   const sel = state.assign.sel; sel.has(id) ? sel.delete(id) : sel.add(id);
   renderMarkers(); renderAssign();
 }
@@ -1191,7 +1213,7 @@ function renderAssign() {
   $$(".job-seg button").forEach((b) => b.classList.toggle("active", b.dataset.job === job));
   $("#assignBar .ab-info").innerHTML = n
     ? `<b>${n}</b> sign${n === 1 ? "" : "s"} selected for <b>${JOB_LABEL[job].toLowerCase()}</b>`
-    : `Tap pins to select them for <b>${JOB_LABEL[job].toLowerCase()}</b>. Dashed pins are unassigned.${job === "drop" ? " Picked-up locations can be chosen to use again." : ""}`;
+    : `Tap pins to select them for <b>${JOB_LABEL[job].toLowerCase()}</b>. Dashed pins are unassigned.${job === "drop" ? " Picked-up locations can be chosen to use again." : " Only signs tagged dropped off can be tasked for pickup."}`;
   $$(".sel-strag").forEach((b) => { b.textContent = `Select stragglers (${strag.length})`; b.disabled = !strag.length; });
   $$(".sel-clear").forEach((b) => b.classList.toggle("hidden", !n));
   $$(".do-assign").forEach((b) => { b.textContent = n ? `Assign ${n} to…` : "Assign to…"; b.disabled = !n; });
@@ -1200,7 +1222,7 @@ function renderAssign() {
   const rowFor = (s) => `
     <label class="srow ${a.sel.has(s.id) ? "on" : ""}">
       <input type="checkbox" data-sel="${s.id}" ${a.sel.has(s.id) ? "checked" : ""}>
-      <span class="num ${s.status || "pending"}">${esc(s.num ?? "")}</span>
+      <span class="num ${dcls(s)}">${esc(s.num ?? "")}</span>
       <span class="srow-addr">${esc(s.address)}${s.hazards?.length ? ` <span class="next-hz">⚠ ${s.hazards.length}</span>` : ""}</span>
       ${hasLoc(s) ? "" : '<span class="warn">no pin</span>'}
     </label>`;
@@ -1222,7 +1244,7 @@ function renderAssign() {
         <h3>Last Call Stragglers</h3><span class="count">${strag.length}</span>
         ${strag.length ? `<button class="btn link sel-strag-all" type="button">Select all</button>` : ""}
       </div>
-      <p class="muted small" style="margin:2px 0 8px">${job === "drop" ? "Locations still to drop off with no drop-off volunteer." : "Signs not yet picked up with nobody tasked for pickup."}</p>
+      <p class="muted small" style="margin:2px 0 8px">${job === "drop" ? "Potential locations with nobody tasked to drop off." : "Dropped-off signs with nobody tasked to pick them up."}</p>
       ${strag.length ? `<div class="srows">${strag.sort((x, y) => (x.num || 0) - (y.num || 0)).map(rowFor).join("")}</div>`
         : `<div class="all-covered">Everyone's covered. No ${JOB_LABEL[job].toLowerCase()} stragglers.</div>`}
     </div>
@@ -1272,6 +1294,7 @@ function openAssignPicker() {
   const a = state.assign, n = a.sel.size; if (!n) return;
   const job = a.job;
   $("#apJob").textContent = `${JOB_LABEL[job]} assignment`;
+  $("#apUnassign").textContent = job === "drop" ? "Unassign (back to Potential location)" : "Unassign (send to Last Call Stragglers)";
   $("#apTitle").textContent = `Assign ${n} sign${n === 1 ? "" : "s"} to…`;
   const names = allVolunteerNames();
   $("#apList").innerHTML = names.length ? names.map((name) => {
@@ -1302,11 +1325,15 @@ function doAssign(name, isNew = false) {
     setTimeout(() => toast(`${name} has no access code yet. Add their phone in Manage → Volunteers.`, 5000), 3600);
   // Giving a retrieved sign a drop-off volunteer puts it back to "To place"
   const reused = a.job === "drop" && name ? ids.filter((id) => state.signs.find((s) => s.id === id)?.status === "retrieved") : [];
+  // Unassigning a drop-off makes it a Potential location again, so any pickup tasking goes too
+  const clearPickup = a.job === "drop" && !name;
   state.store.batchUpdate(ids, (id) => ({ [field]: name, updatedAt: "NOW", updatedBy: state.me.name,
+    ...(clearPickup ? { pickupAssignee: "" } : {}),
     ...(reused.includes(id) ? RESET_TO_PLACE : {}) })).catch(saveErr);
   closeAssignPicker();
   a.sel.clear();
   toast((name ? `${ids.length} sign${ids.length === 1 ? "" : "s"} assigned to ${name} for ${JOB_LABEL[a.job].toLowerCase()}`
+              : a.job === "drop" ? `${ids.length} location${ids.length === 1 ? "" : "s"} back to Potential location`
               : `${ids.length} sign${ids.length === 1 ? "" : "s"} moved to Last Call Stragglers`)
         + (reused.length ? `. ${reused.length} picked-up location${reused.length === 1 ? " is" : "s are"} back to "To drop off".` : ""), 4500);
   render();
