@@ -15,14 +15,15 @@ window.APP_CONFIG = {
 
 
   // --- Map (OpenStreetMap: free, no key needed) --------------------------
-  // Where the map opens before any signs exist
-  defaultCenter: { lat: 49.2827, lng: -123.1207 }, // Vancouver, BC
+  // The map always opens here (set fitToSignsOnOpen: true to zoom to the signs instead)
+  defaultCenter: { lat: 50.6745, lng: -120.3273 }, // Kamloops, BC
   defaultZoom: 12,
+  fitToSignsOnOpen: false,
 
   // Helps the address lookup find the right place:
   //   addressSuffix is added to addresses that don't already name a city.
   //   countryCodes limits results to these countries ("ca", "us", or "ca,us").
-  addressSuffix: "",          // e.g. "Vancouver, BC"
+  addressSuffix: "Kamloops, BC",
   countryCodes: "ca",
 
   // Hazard checkboxes shown when someone adds or edits a sign location.
