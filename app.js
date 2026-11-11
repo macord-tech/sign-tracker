@@ -717,22 +717,26 @@ function renderAdminLists() {
   const coords = state.members.filter((m) => m.role === "admin").map((m) => m.name);
   const noCode = names.filter((n) => !roster.some((r) => norm(r.name) === norm(n)) && !coords.some((c) => norm(c) === norm(n)));
   const link = location.origin + location.pathname;
-  const smsBody = (r) => encodeURIComponent(`Hi ${r.name.split(" ")[0]}, your Winter Extreme Sign Tracker code is ${r.code}. Open ${link} and enter it to see your signs.`);
+  const smsText = (r) => `Hi ${r.name.split(" ")[0]}, your Winter Extreme Sign Tracker code is ${r.code}. Open ${link} and enter it to see your signs.`;
   const row = (r) => {
     const c = counts(r.name), joined = state.members.some((m) => m.code === r.code || norm(m.name) === norm(r.name));
     const digits = String(r.phone || "").replace(/[^\d+]/g, "");
+    const fullPhone = digits.replace(/\D/g, "").length >= 10;
+    const msg = smsText(r);
     return `<div class="vrow">
       <div class="vmain">
         <div class="vtop"><span class="vdot" style="background:${volColor(r.name)}"></span><b>${esc(r.name)}</b>
           <span class="code-chip">${esc(r.code)}</span>${joined ? '<span class="joined">signed in</span>' : ""}</div>
         ${r.phone ? `<div class="muted small">${esc(r.phone)}</div>` : ""}
+        ${fullPhone ? "" : `<div class="warn">Phone number looks incomplete. Remove (×) and add them again with the full number.</div>`}
         <div class="muted small">${c.drop || c.pick
           ? [c.drop ? `Drop-off ${c.placed}/${c.drop} placed` : "", c.pick ? `Pickup ${c.retrieved}/${c.pick} retrieved` : ""].filter(Boolean).join(" · ")
           : "No signs assigned yet"}</div>
       </div>
       <div class="vacts">
-        ${digits ? `<a class="btn small light" href="sms:${digits}?&body=${smsBody(r)}" title="Text them their code">Text code</a>
+        ${fullPhone ? `<a class="btn small light vol-text" href="sms:${digits}?&body=${encodeURIComponent(msg)}" data-msg="${esc(msg)}" title="Text them their code">Text code</a>
         <a class="btn small light" href="tel:${digits}" title="Call">Call</a>` : ""}
+        <button class="btn small light vol-copy" data-msg="${esc(msg)}" type="button" title="Copy the code message to paste anywhere">Copy</button>
         <button class="btn small danger vol-remove" data-code="${esc(r.code)}" data-name="${esc(r.name)}" type="button" title="Remove">×</button>
       </div>
     </div>`;
@@ -748,6 +752,10 @@ $("#volForm").onsubmit = async (e) => {
   e.preventDefault();
   const name = $("#volName").value.trim(), phone = $("#volPhone").value.trim();
   if (!name || !phone) return;
+  if (phone.replace(/\D/g, "").length < 10) {
+    $("#volMsg").innerHTML = `<span class="error">Enter the full phone number including area code, e.g. 604-555-0142.</span>`;
+    $("#volPhone").focus(); return;
+  }
   const btn = $("#volForm button"); btn.disabled = true; $("#volMsg").textContent = "";
   try {
     const code = await state.store.addVolunteer(name, phone);
@@ -760,7 +768,28 @@ $("#volPhone").oninput = () => {
   const c = codeFromPhone($("#volPhone").value);
   $("#volMsg").innerHTML = c ? `Code will be <span class="code-chip">${esc(c)}</span>` : "";
 };
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch {}
+    ta.remove(); return ok;
+  }
+}
 $("#volTable").onclick = async (e) => {
+  const cp = e.target.closest(".vol-copy");
+  if (cp) {
+    if (await copyText(cp.dataset.msg)) toast("Message copied. Paste it into a text or email.", 3500);
+    else prompt("Copy this message:", cp.dataset.msg);
+    return;
+  }
+  const tx = e.target.closest(".vol-text");
+  if (tx) {
+    // Also copy, in case this device can't open a texting app from a link
+    if (await copyText(tx.dataset.msg)) toast("Opening Messages. The text is also copied, in case it doesn't open.", 4500);
+    return;
+  }
   const rm = e.target.closest(".vol-remove");
   if (rm) {
     if (!confirm(`Remove ${rm.dataset.name} (${rm.dataset.code}) from the volunteer list? Their code will stop working for new sign-ins. Their sign assignments stay.`)) return;
