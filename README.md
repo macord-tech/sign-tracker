@@ -92,11 +92,13 @@ Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) a
 6. **Locations stay after pickup** until a coordinator deletes them (only coordinators can delete). To use a location again, tap **↺ Use location again** on its card, or select it in Assign mode (Drop-off) and assign a volunteer. **Reset all to "To drop off"** does this for every location at once.
 
 ### The sign cycle
-1. **To drop off** (orange): the coordinator creates the location and assigns a drop-off volunteer.
-2. **Sign dropped off** (green): tagged by the drop-off volunteer, the pickup volunteer, or a coordinator.
-3. **Tasked for pickup:** the coordinator assigns a pickup volunteer in Assign mode (Pickup). This can happen before or after drop-off.
-4. **Picked up** (grey): tagged by the pickup volunteer or a coordinator, and **only after the sign has been tagged dropped off**.
-5. The location stays on the map for next time.
+1. **Potential location** (grey): the coordinator creates the location. Nobody is tasked yet.
+2. **To drop off** (orange): the coordinator assigns a drop-off volunteer in Assign mode (Drop-off).
+3. **Sign dropped off** (green): tagged by the drop-off volunteer or a coordinator.
+4. **Tasked for pickup:** the coordinator assigns a pickup volunteer in Assign mode (Pickup). **This is only possible once the sign is tagged dropped off.**
+5. **Picked up:** tagged by the pickup volunteer or a coordinator. The location goes back to grey **Potential location**, ready for next time.
+
+If a drop-off never happens, unassign it in Assign mode (Drop-off → select → Assign to… → **Unassign**). The location goes back to grey **Potential location**.
 
 ### Adding a new sign location (anyone)
 1. Tap **+ New sign** on the map, or **+ New sign location** at the top of the list.
@@ -120,7 +122,7 @@ Volunteers can edit locations they added themselves. Only coordinators can delet
 2. Enter your code: the last 4 digits of your phone number + CSP, e.g. **0142CSP**.
 3. **My signs** shows only your signs. Tap **Directions** to navigate in Google Maps.
 4. At each spot, tap **✓ Sign dropped off**. The pin turns from orange to green for everyone.
-5. On pickup day, tap **✓ Sign picked up** at each sign you've been tasked with. The pin turns grey. If a sign you're picking up hasn't been tagged dropped off yet, check it's there and tag it dropped off first.
+5. On pickup day, tap **✓ Sign picked up** at each sign you've been tasked with. The pin turns grey.
 6. Mistapped? Use **Undo**.
 7. **Nearest first** sorts your list by distance from where you are. The target button on the map shows your location.
 
@@ -131,9 +133,9 @@ If there's no signal, keep going. Taps are saved on the phone and sync automatic
 ### Pin colours
 | Colour | Meaning |
 |---|---|
+| Grey | Potential location (nobody tasked, or already picked up) |
 | Orange | To drop off |
 | Green | Sign dropped off (waiting for pickup) |
-| Grey | Picked up |
 
 Pins with a dark outline are assigned to you.
 
