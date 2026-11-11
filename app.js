@@ -210,6 +210,10 @@ async function onCardClick(e) {
     case "retrieve": upd({ status: "retrieved", retrievedBy: who, retrievedAt: "NOW" }, `#${sign.num} marked retrieved ✓`); maybeCelebrate("retrieved", id); break;
     case "undo-place": if (confirm(`Undo "placed" for #${sign.num}?`)) upd({ status: "pending", placedBy: null, placedAt: null }, "Undone"); break;
     case "undo-retrieve": if (confirm(`Undo "retrieved" for #${sign.num}?`)) upd({ status: "placed", retrievedBy: null, retrievedAt: null }, "Undone"); break;
+    case "place-again":
+      if (confirm(`Put #${sign.num} back to "To place"${sign.assignee ? ` for ${sign.assignee}` : ""}? Its placed/retrieved times and pickup volunteer are cleared. You can change who places it in Assign mode.`))
+        upd(RESET_TO_PLACE, `#${sign.num} is back to "To place"`);
+      break;
     case "show": select(id, true); setView("map"); break;
     case "nav": openNav(sign); break;
     case "nav-change": openNav(sign, true); break;
@@ -312,7 +316,7 @@ function cardHTML(s, inMap = false) {
   if (st === "pending") main = `<button class="btn place" data-act="place" data-id="${s.id}">✓ Mark placed</button>`;
   else if (st === "placed") main = `<button class="btn retrieve" data-act="retrieve" data-id="${s.id}">✓ Mark retrieved</button>`;
   const undo = st === "placed" ? `<button class="btn link" data-act="undo-place" data-id="${s.id}">Undo placed</button>`
-    : st === "retrieved" ? `<button class="btn link" data-act="undo-retrieve" data-id="${s.id}">Undo retrieved</button>` : "";
+    : st === "retrieved" ? `${isAdmin() ? `<button class="btn light" data-act="place-again" data-id="${s.id}">↺ Place again</button>` : ""}<button class="btn link" data-act="undo-retrieve" data-id="${s.id}">Undo retrieved</button>` : "";
   return `
   <div class="sign ${state.selectedId === s.id && !inMap ? "sel" : ""}" id="${inMap ? "" : "card-" + s.id}">
     ${inMap ? `<button class="close-x" data-act="close" data-id="${s.id}" aria-label="Close">×</button>` : ""}
@@ -380,9 +384,12 @@ function initMap() {
 
 function showMapMsg(html) { const m = $("#mapMsg"); m.innerHTML = `<div>${html}</div>`; m.classList.remove("hidden"); }
 
+// Drop-off: signs still to place, or already retrieved (they can be placed again).
+// Pickup: anything not yet retrieved.
 function assignable(s, job = state.assign.job) {
-  return job === "drop" ? (s.status || "pending") === "pending" : s.status !== "retrieved";
+  return job === "drop" ? (s.status || "pending") !== "placed" : s.status !== "retrieved";
 }
+const RESET_TO_PLACE = { status: "pending", placedBy: null, placedAt: null, retrievedBy: null, retrievedAt: null, pickupAssignee: "" };
 function makeIcon(s) {
   const st = s.status || "pending";
   if (state.assign.on) {
@@ -813,8 +820,8 @@ $("#exportBtn").onclick = () => {
 };
 
 $("#resetBtn").onclick = async () => {
-  if (!state.signs.length || !confirm(`Set all ${state.signs.length} signs back to "To place"? This clears placed/retrieved history.`)) return;
-  await state.store.batchUpdate(state.signs.map((s) => s.id), () => ({ status: "pending", placedBy: null, placedAt: null, retrievedBy: null, retrievedAt: null }));
+  if (!state.signs.length || !confirm(`Set all ${state.signs.length} signs back to "To place"? This clears placed/retrieved history and pickup volunteers. Drop-off volunteers stay.`)) return;
+  await state.store.batchUpdate(state.signs.map((s) => s.id), () => RESET_TO_PLACE);
   toast("All signs reset");
 };
 
@@ -1154,7 +1161,7 @@ function exitAssign() {
 function toggleSel(id) {
   const s = state.signs.find((x) => x.id === id);
   if (!s) return;
-  if (!assignable(s)) { toast(state.assign.job === "drop" ? `#${s.num} is already placed` : `#${s.num} is already picked up`); return; }
+  if (!assignable(s)) { toast(state.assign.job === "drop" ? `#${s.num} is in place now. Assign its pickup instead, or mark it retrieved first.` : `#${s.num} is already picked up`, 4000); return; }
   const sel = state.assign.sel; sel.has(id) ? sel.delete(id) : sel.add(id);
   renderMarkers(); renderAssign();
 }
@@ -1169,7 +1176,7 @@ function renderAssign() {
   $$(".job-seg button").forEach((b) => b.classList.toggle("active", b.dataset.job === job));
   $("#assignBar .ab-info").innerHTML = n
     ? `<b>${n}</b> sign${n === 1 ? "" : "s"} selected for <b>${JOB_LABEL[job].toLowerCase()}</b>`
-    : `Tap pins to select them for <b>${JOB_LABEL[job].toLowerCase()}</b>. Dashed pins are unassigned.`;
+    : `Tap pins to select them for <b>${JOB_LABEL[job].toLowerCase()}</b>. Dashed pins are unassigned.${job === "drop" ? " Retrieved signs can be picked to place again." : ""}`;
   $$(".sel-strag").forEach((b) => { b.textContent = `Select stragglers (${strag.length})`; b.disabled = !strag.length; });
   $$(".sel-clear").forEach((b) => b.classList.toggle("hidden", !n));
   $$(".do-assign").forEach((b) => { b.textContent = n ? `Assign ${n} to…` : "Assign to…"; b.disabled = !n; });
@@ -1278,10 +1285,14 @@ function doAssign(name, isNew = false) {
   if (!ids.length) return;
   if (name && isNew && !state.roster.some((r) => norm(r.name) === norm(name)))
     setTimeout(() => toast(`${name} has no access code yet. Add their phone in Manage → Volunteers.`, 5000), 3600);
-  state.store.batchUpdate(ids, () => ({ [field]: name, updatedAt: "NOW", updatedBy: state.me.name })).catch(saveErr);
+  // Giving a retrieved sign a drop-off volunteer puts it back to "To place"
+  const reused = a.job === "drop" && name ? ids.filter((id) => state.signs.find((s) => s.id === id)?.status === "retrieved") : [];
+  state.store.batchUpdate(ids, (id) => ({ [field]: name, updatedAt: "NOW", updatedBy: state.me.name,
+    ...(reused.includes(id) ? RESET_TO_PLACE : {}) })).catch(saveErr);
   closeAssignPicker();
   a.sel.clear();
-  toast(name ? `${ids.length} sign${ids.length === 1 ? "" : "s"} assigned to ${name} for ${JOB_LABEL[a.job].toLowerCase()}`
-             : `${ids.length} sign${ids.length === 1 ? "" : "s"} moved to Last Call Stragglers`, 3500);
+  toast((name ? `${ids.length} sign${ids.length === 1 ? "" : "s"} assigned to ${name} for ${JOB_LABEL[a.job].toLowerCase()}`
+              : `${ids.length} sign${ids.length === 1 ? "" : "s"} moved to Last Call Stragglers`)
+        + (reused.length ? `. ${reused.length} retrieved sign${reused.length === 1 ? " is" : "s are"} back to "To place".` : ""), 4500);
   render();
 }
