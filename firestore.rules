@@ -73,6 +73,10 @@ service cloud.firestore {
         && (!('hazards' in request.resource.data) || request.resource.data.hazards is list)
         && request.resource.data.address is string && request.resource.data.address.size() <= 300;
     }
+    // A sign can only be tagged "picked up" once it has been tagged "dropped off"
+    function pickupOk() {
+      return request.resource.data.status != 'retrieved' || resource.data.status in ['placed', 'retrieved'];
+    }
     function isCreator() {
       return isMember() && resource.data.get('createdByUid', '') == request.auth.uid;
     }
@@ -86,14 +90,14 @@ service cloud.firestore {
             && request.resource.data.createdByUid == request.auth.uid
             && request.resource.data.status in ['pending', 'placed']);
 
-      // Coordinators, or the volunteer who created the sign, can delete it
-      allow delete: if isAdmin() || isCreator();
+      // Only coordinators can delete a location
+      allow delete: if isAdmin();
 
       allow update: if isAdmin()
         // the volunteer who created a sign can edit all of it
-        || (isCreator() && signFieldsOk() && request.resource.data.createdByUid == request.auth.uid)
-        // any volunteer can mark any sign placed / retrieved
-        || (isMember()
+        || (isCreator() && signFieldsOk() && pickupOk() && request.resource.data.createdByUid == request.auth.uid)
+        // volunteers can tag dropped off / picked up (the app limits this to the assigned volunteers)
+        || (isMember() && pickupOk()
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt', 'updatedAt', 'updatedBy'])
             && request.resource.data.status in ['pending', 'placed', 'retrieved']);
