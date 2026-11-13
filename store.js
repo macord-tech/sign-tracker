@@ -4,8 +4,8 @@
 //
 // Sign document shape:
 //   { id, num, address, lat, lng, assignee, notes,
-//     status: "pending" | "placed" | "retrieved",
-//     placedBy, placedAt, retrievedBy, retrievedAt, updatedAt, updatedBy, createdAt }
+//     status: "pending" | "placed" | "retrieved" | "missing",
+//     placedBy, placedAt, missingBy, missingAt, retrievedBy, retrievedAt, updatedAt, updatedBy, createdAt }
 
 const FB_VERSION = "10.14.1";
 const FB = (m) => `https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-${m}.js`;
@@ -140,7 +140,7 @@ class FirebaseStore {
       const batch = writeBatch(this.db);
       for (const s of list.slice(i, i + 400)) {
         const d = clean(s);
-        for (const k of ["placedAt", "retrievedAt", "updatedAt"]) if (d[k] === "NOW") d[k] = serverTimestamp();
+        for (const k of ["placedAt", "retrievedAt", "missingAt", "updatedAt"]) if (d[k] === "NOW") d[k] = serverTimestamp();
         batch.set(doc(collection(this.db, "signs")), { ...d, createdAt: serverTimestamp() });
       }
       await batch.commit();
@@ -150,7 +150,7 @@ class FirebaseStore {
   async updateSign(id, patch) {
     const { doc, updateDoc, serverTimestamp } = this.F;
     const p = { ...patch };
-    for (const k of ["placedAt", "retrievedAt", "updatedAt"]) if (p[k] === "NOW") p[k] = serverTimestamp();
+    for (const k of ["placedAt", "retrievedAt", "missingAt", "updatedAt"]) if (p[k] === "NOW") p[k] = serverTimestamp();
     // Don't await the server — with offline cache the UI updates immediately and syncs later.
     return updateDoc(doc(this.db, "signs", id), p);
   }
@@ -170,11 +170,26 @@ class FirebaseStore {
       const batch = writeBatch(this.db);
       ids.slice(i, i + 400).forEach((id) => {
         const p = { ...patchFn(id) };
-        for (const k of ["placedAt", "retrievedAt", "updatedAt"]) if (p[k] === "NOW") p[k] = this.F.serverTimestamp();
+        for (const k of ["placedAt", "retrievedAt", "missingAt", "updatedAt"]) if (p[k] === "NOW") p[k] = this.F.serverTimestamp();
         batch.update(doc(this.db, "signs", id), p);
       });
       await batch.commit();
     }
+  }
+
+  // Patrol dog location on the map (game/spot): everyone reads, only the head coordinator writes
+  subscribeDogSpot(cb) {
+    const { doc, onSnapshot } = this.F;
+    return onSnapshot(doc(this.db, "game", "spot"), (snap) => {
+      const d = snap.exists() ? snap.data() : null;
+      cb(d && typeof d.lat === "number" && typeof d.lng === "number" ? { lat: d.lat, lng: d.lng } : null);
+    }, (e) => { console.warn("dog spot", e); cb(null); });
+  }
+  async saveDogSpot(ll) {
+    const { doc, setDoc, deleteDoc, serverTimestamp } = this.F;
+    const ref = doc(this.db, "game", "spot");
+    if (!ll) return deleteDoc(ref);
+    return setDoc(ref, { lat: ll.lat, lng: ll.lng, placedBy: this.me?.name || "", at: serverTimestamp() });
   }
 
   // Shared pages written by coordinators: info/contacts and info/safety
@@ -274,6 +289,18 @@ class DemoStore {
   }
   async deleteSigns(ids) { this._write(LS_SIGNS, this._read(LS_SIGNS, []).filter((x) => !ids.includes(x.id))); this._emit(); }
   async batchUpdate(ids, patchFn) { for (const id of ids) await this.updateSign(id, patchFn(id)); }
+  subscribeDogSpot(cb) {
+    const key = "signtracker.demo.dogspot";
+    this.dogListeners = this.dogListeners || new Set(); this.dogListeners.add(cb);
+    window.addEventListener("storage", (e) => { if (e.key === key) cb(this._read(key, null)); });
+    setTimeout(() => cb(this._read(key, null)));
+    return () => this.dogListeners.delete(cb);
+  }
+  async saveDogSpot(ll) {
+    const key = "signtracker.demo.dogspot";
+    ll ? this._write(key, { lat: ll.lat, lng: ll.lng }) : localStorage.removeItem(key);
+    (this.dogListeners || []).forEach((cb) => cb(ll ? { lat: ll.lat, lng: ll.lng } : null));
+  }
   subscribeInfo(id, cb) {
     const key = "signtracker.demo.info." + id;
     const emit = () => cb(this._read(key, null));

@@ -1,5 +1,5 @@
-// Help: in-app user manuals (volunteer + coordinator), and a hidden ski game.
-// Easter egg: tap the Winter Extreme logo 5 times quickly.
+// Help: in-app user manuals (volunteer + coordinator), and the Patrol Run ski game.
+// The game opens from the patrol dog on the map (placed by the head coordinator in Manage).
 (function () {
   "use strict";
   const $ = (s) => document.querySelector(s);
@@ -26,7 +26,6 @@
     .top-actions .icon-btn { width: 34px; }
     #meBtn { max-width: 84px; }
   }
-  .brand-logo { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .game-modal { position: fixed; inset: 0; z-index: 80; background: #eef4fa; touch-action: none; user-select: none; -webkit-user-select: none; }
   .game-modal canvas { display: block; width: 100%; height: 100%; }
   .game-ui { position: absolute; left: 0; right: 0; top: calc(8px + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; padding: 0 12px; pointer-events: none; font: 800 16px system-ui, sans-serif; color: #1f2933; }
@@ -50,7 +49,9 @@
     <ul><li>${dot("var(--retrieved)")}<b>Grey</b>: potential location, nobody on it yet</li>
     <li>${dot("var(--pending)")}<b>Orange</b>: to drop off</li>
     <li>${dot("var(--placed)")}<b>Green</b>: sign dropped off</li>
-    <li>${dot("#e03131")}<b>Small red dot</b>: dropped off, needs someone to pick it up</li></ul>
+    <li>${dot("var(--missing)")}<b>Purple</b>: sign reported missing</li>
+    <li>${dot("#e03131")}<b>Small red dot</b>: dropped off, needs someone to pick it up</li>
+    <li>🐕 <b>The patrol dog</b>: tap it for a quick game of Patrol Run</li></ul>
 
     <h3>3. Drop off your signs</h3>
     <ol><li>The <b>Next</b> panel shows your next address. Tap <b>Navigate</b> to open it in your maps app.</li>
@@ -59,7 +60,8 @@
 
     <h3>4. Pick up your signs</h3>
     <ol><li>On pickup day, go to each sign you're tasked with.</li>
-    <li>Tap <b>✓ Sign picked up</b>. The pin turns grey.</li></ol>
+    <li>Tap <b>✓ Sign picked up</b>. The pin turns grey.</li>
+    <li>Sign not there? Tap <b>? Report missing</b>. The pin turns purple and a coordinator takes it from there.</li></ol>
 
     <h3>5. Take on more</h3>
     <ul><li>Grey pin: tap <b>🙋 I'll sign that</b> to drop a sign off there.</li>
@@ -109,6 +111,11 @@
     <ol><li>Wait until signs are tagged dropped off (green, small red dot).</li>
     <li><b>Assign → Pickup</b>, select the pins, <b>Assign to…</b>.</li>
     <li>You can't assign a pickup before the drop-off happens. Volunteers can also claim red-dot pins themselves.</li></ol>
+
+    <h3>Missing signs</h3>
+    <ul><li>When a pickup volunteer taps <b>Report missing</b>, the pin turns <b>purple</b> and the sign goes back into <b>Last Call Stragglers</b> under <b>Pickup</b>.</li>
+    <li>To send someone to look for it: <b>Assign → Pickup</b>, select it, <b>Assign to…</b>. If they find it, they tag it picked up.</li>
+    <li>To give up on it: open the sign and tap <b>Clear missing</b>. It goes back to grey (potential location).</li></ul>
 
     <h3>6. Fix things</h3>
     <ul><li>Drop-off never happened? Select it, <b>Assign to… → Unassign</b>. It goes back to grey.</li>
@@ -172,14 +179,6 @@
     b.onclick = openHelp;
     acts.insertBefore(b, acts.firstChild);
   }
-
-  // ---------- Easter egg: tap the logo 5 times ----------
-  let taps = [];
-  const logo = $(".topbar .brand-logo");
-  if (logo) logo.addEventListener("click", () => {
-    const now = Date.now(); taps = taps.filter((t) => now - t < 2500); taps.push(now);
-    if (taps.length >= 5) { taps = []; startGame(); }
-  });
 
   // ---------- Shared high score (Firestore game/leader; local fallback in demo mode) ----------
   const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -366,21 +365,7 @@
       ctx.strokeStyle = "rgba(120,120,120,.6)"; ctx.lineWidth = 1.5; const w = Math.sin(performance.now() / 200) * 2;
       ctx.beginPath(); ctx.moveTo(x - 3, y - 14); ctx.quadraticCurveTo(x - 6 + w, y - 19, x - 3, y - 24); ctx.moveTo(x + 3, y - 14); ctx.quadraticCurveTo(x + w, y - 19, x + 3, y - 24); ctx.stroke(); // steam
     }
-    function drawDog(o) {
-      const d = o.vx >= 0 ? 1 : -1, leg = Math.sin(o.ph) * 4;
-      ctx.save(); ctx.translate(o.x, o.y); ctx.scale(d, 1);
-      ctx.strokeStyle = "#b07a1e"; ctx.lineWidth = 3; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(-10, 4); ctx.lineTo(-10 + leg, 13); ctx.moveTo(-5, 4); ctx.lineTo(-5 - leg, 13); ctx.moveTo(7, 4); ctx.lineTo(7 + leg, 13); ctx.moveTo(11, 4); ctx.lineTo(11 - leg, 13); ctx.stroke(); // legs
-      ctx.beginPath(); ctx.moveTo(-15, -2); ctx.quadraticCurveTo(-24, -10 + leg, -21, -14); ctx.stroke(); // tail
-      ctx.fillStyle = "#e0a63a"; ctx.beginPath(); ctx.ellipse(0, 0, 16, 8, 0, 0, 7); ctx.fill(); // body
-      ctx.fillStyle = "#d32f2f"; ctx.fillRect(-8, -7, 15, 12); // red vest
-      ctx.fillStyle = "#fff"; ctx.fillRect(-2, -5, 3, 8); ctx.fillRect(-4.5, -2.5, 8, 3); // white cross
-      ctx.fillStyle = "#e0a63a"; ctx.beginPath(); ctx.ellipse(17, -7, 7, 6, 0, 0, 7); ctx.fill(); // head
-      ctx.beginPath(); ctx.ellipse(23, -5, 4, 3, 0, 0, 7); ctx.fill(); // snout
-      ctx.fillStyle = "#b07a1e"; ctx.beginPath(); ctx.ellipse(14, -5, 3, 5, 0.3, 0, 7); ctx.fill(); // ear
-      ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(26.5, -5.5, 1.6, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(19, -9, 1.2, 0, 7); ctx.fill(); // nose, eye
-      ctx.restore();
-    }
+    function drawDog(o) { drawDogOn(ctx, o); }
     function drawSkier() {
       const x = g.x, y = g.y, lean = Math.max(-0.5, Math.min(0.5, g.vx / 500));
       ctx.save(); ctx.translate(x, y);
@@ -430,4 +415,34 @@
     wrap.addEventListener("click", (e) => { if (e.target.closest("[data-q]")) quit(); if (e.target.closest("[data-again]")) reset(); });
     reset(); raf = requestAnimationFrame(loop);
   }
+
+  // The patrol dog, drawn the same way as in the game
+  function drawDogOn(ctx, o) {
+    const d = o.vx >= 0 ? 1 : -1, leg = Math.sin(o.ph) * 4;
+    ctx.save(); ctx.translate(o.x, o.y); ctx.scale(d, 1);
+    ctx.strokeStyle = "#b07a1e"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-10, 4); ctx.lineTo(-10 + leg, 13); ctx.moveTo(-5, 4); ctx.lineTo(-5 - leg, 13); ctx.moveTo(7, 4); ctx.lineTo(7 + leg, 13); ctx.moveTo(11, 4); ctx.lineTo(11 - leg, 13); ctx.stroke(); // legs
+    ctx.beginPath(); ctx.moveTo(-15, -2); ctx.quadraticCurveTo(-24, -10 + leg, -21, -14); ctx.stroke(); // tail
+    ctx.fillStyle = "#e0a63a"; ctx.beginPath(); ctx.ellipse(0, 0, 16, 8, 0, 0, 7); ctx.fill(); // body
+    ctx.fillStyle = "#d32f2f"; ctx.fillRect(-8, -7, 15, 12); // red vest
+    ctx.fillStyle = "#fff"; ctx.fillRect(-2, -5, 3, 8); ctx.fillRect(-4.5, -2.5, 8, 3); // white cross
+    ctx.fillStyle = "#e0a63a"; ctx.beginPath(); ctx.ellipse(17, -7, 7, 6, 0, 0, 7); ctx.fill(); // head
+    ctx.beginPath(); ctx.ellipse(23, -5, 4, 3, 0, 0, 7); ctx.fill(); // snout
+    ctx.fillStyle = "#b07a1e"; ctx.beginPath(); ctx.ellipse(14, -5, 3, 5, 0.3, 0, 7); ctx.fill(); // ear
+    ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(26.5, -5.5, 1.6, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(19, -9, 1.2, 0, 7); ctx.fill(); // nose, eye
+    ctx.restore();
+  }
+
+  // Map icon: the game's dog as an image (64x40 CSS pixels)
+  let dogURL = null;
+  function dogIcon() {
+    if (dogURL) return dogURL;
+    const c = document.createElement("canvas"), k = 2; c.width = 64 * k; c.height = 40 * k;
+    const x = c.getContext("2d"); x.scale(k, k);
+    drawDogOn(x, { x: 30, y: 24, vx: 1, ph: 0.6 });
+    return (dogURL = c.toDataURL("image/png"));
+  }
+
+  window.PatrolRun = { start: startGame, dogIcon };
+  window.dispatchEvent(new Event("patrolrun-ready"));
 })();

@@ -4,20 +4,22 @@ const cfg = window.APP_CONFIG || {};
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
-const STATUS_LABEL = { pending: "To drop off", placed: "Sign dropped off", retrieved: "Picked up" };
+const STATUS_LABEL = { pending: "To drop off", placed: "Sign dropped off", retrieved: "Picked up", missing: "Missing" };
 // What a location looks like on the map/list:
 //  potential = no drop-off volunteer yet, or its sign has been picked up (grey)
 //  pending   = a volunteer is tasked to drop it off (orange)
 //  placed    = sign dropped off (green)
-const DISP_LABEL = { potential: "Potential location", pending: "To drop off", placed: "Sign dropped off" };
-const DISP_CLASS = { potential: "retrieved", pending: "pending", placed: "placed" };
+//  missing   = the pickup volunteer reported the sign missing (purple)
+const DISP_LABEL = { potential: "Potential location", pending: "To drop off", placed: "Sign dropped off", missing: "Missing" };
+const DISP_CLASS = { potential: "retrieved", pending: "pending", placed: "placed", missing: "missing" };
 function dispState(s) {
   if (s.status === "placed") return "placed";
+  if (s.status === "missing") return "missing";
   if (s.status === "retrieved") return "potential";
   return splitNames(s.assignee).length ? "pending" : "potential";
 }
 const dcls = (s) => DISP_CLASS[dispState(s)];
-const COLORS = { pending: "var(--pending)", placed: "var(--placed)", retrieved: "var(--retrieved)" };
+const COLORS = { pending: "var(--pending)", placed: "var(--placed)", retrieved: "var(--retrieved)", missing: "var(--missing)" };
 
 const state = {
   store: null, me: null, signs: [], members: [],
@@ -30,7 +32,7 @@ const state = {
 };
 
 // Google Maps objects
-const gm = { map: null, markers: new Map(), meMarker: null, picking: false };
+const gm = { map: null, markers: new Map(), meMarker: null, picking: false, dog: null, dogSpot: null };
 
 // ------------------------------------------------------------------ helpers
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -48,14 +50,21 @@ function isMine(sign) { return mineFor(sign, "drop") || mineFor(sign, "pickup");
 // pickup = signs tagged dropped off with nobody tasked to pick them up
 function stragglers(job) {
   return state.signs.filter((s) => !assigneesOf(s, job).length &&
-    (job === "drop" ? (s.status || "pending") === "pending" : s.status === "placed"));
+    (job === "drop" ? (s.status || "pending") === "pending" : PICKUP_STATES.includes(s.status)));
 }
 function isAdmin() { return state.me?.role === "admin"; }
+// Only the head coordinator can place the patrol dog (Patrol Run game) on the map
+const DOG_ADMIN = "makya";
+function isDogAdmin() { return isAdmin() && norm(state.me?.name) === DOG_ADMIN; }
+// Signs that can be tasked for pickup: dropped off, or reported missing (a coordinator sends someone to look)
+const PICKUP_STATES = ["placed", "missing"];
 // Who can tag what:
 //  "Sign dropped off": the drop-off volunteer, the pickup volunteer (confirming it's there), or an admin
-//  "Picked up": the pickup volunteer or an admin, and only once the sign is tagged dropped off
+//  "Picked up": the pickup volunteer or an admin, and only once the sign is tagged dropped off (or found after being reported missing)
+//  "Report missing": the pickup volunteer or an admin, once the sign is dropped off and tasked for pickup
 function canTagDropped(s) { return isAdmin() || mineFor(s, "drop") || mineFor(s, "pickup"); }
-function canTagPicked(s) { return (s.status === "placed") && (isAdmin() || mineFor(s, "pickup")); }
+function canTagPicked(s) { return PICKUP_STATES.includes(s.status) && (isAdmin() || mineFor(s, "pickup")); }
+function canReportMissing(s) { return s.status === "placed" && !!splitNames(s.pickupAssignee).length && (isAdmin() || mineFor(s, "pickup")); }
 
 let toastTimer;
 function toast(msg, ms = 2600) {
@@ -165,6 +174,9 @@ function startApp() {
     state.store.subscribeRoster((r) => { state.roster = r; renderAdminLists(); renderAssign(); });
     $("#assignBtn").classList.remove("hidden");
   }
+  if (isDogAdmin()) $("#dogSec").classList.remove("hidden");
+  state.store.subscribeDogSpot((ll) => { gm.dogSpot = ll; renderDog(); });
+  window.addEventListener("patrolrun-ready", renderDog);
   renderContacts(); renderSafety();
   state.store.subscribeInfo("contacts", (d) => { state.info.contacts = d; renderContacts(); });
   state.store.subscribeInfo("safety", (d) => { state.info.safety = d; renderSafety(); updateSafetyDot(); });
@@ -228,8 +240,18 @@ async function onCardClick(e) {
       if (!canTagDropped(sign)) { toast("Only the assigned volunteers or an admin can tag this sign.", 4000); break; }
       upd({ status: "placed", placedBy: who, placedAt: "NOW" }, `#${sign.num} tagged: sign dropped off ✓`); maybeCelebrate("placed", id); break;
     case "retrieve":
-      if (!canTagPicked(sign)) { toast(sign.status !== "placed" ? "This sign has to be tagged dropped off before it can be picked up." : "Only the pickup volunteer or an admin can tag this sign picked up.", 4500); break; }
+      if (!canTagPicked(sign)) { toast(!PICKUP_STATES.includes(sign.status) ? "This sign has to be tagged dropped off before it can be picked up." : "Only the pickup volunteer or an admin can tag this sign picked up.", 4500); break; }
       upd({ status: "retrieved", retrievedBy: who, retrievedAt: "NOW" }, `#${sign.num} tagged: picked up ✓`); maybeCelebrate("retrieved", id); break;
+    case "missing":
+      if (!canReportMissing(sign)) { toast("Only the pickup volunteer or an admin can report this sign missing.", 4000); break; }
+      if (confirm(`Report sign #${sign.num} missing?\n\nIt turns purple and comes off your pickup list. A coordinator will send someone to look for it or clear it.`))
+        upd({ status: "missing", missingBy: who, missingAt: "NOW", pickupAssignee: "" }, `#${sign.num} reported missing`);
+      break;
+    case "clear-missing":
+      if (!isAdmin()) break;
+      if (confirm(`Clear "missing" for #${sign.num}?\n\nThe location goes back to grey "Potential location" with nobody assigned.`))
+        upd({ ...RESET_TO_PLACE, assignee: "" }, `#${sign.num} is back to "Potential location"`);
+      break;
     case "undo-place": if (confirm(`Undo "sign dropped off" for #${sign.num}?`)) upd({ status: "pending", placedBy: null, placedAt: null }, "Undone"); break;
     case "undo-retrieve": if (confirm(`Undo "picked up" for #${sign.num}?`)) upd({ status: "placed", retrievedBy: null, retrievedAt: null }, "Undone"); break;
     case "claim-pickup":
@@ -327,10 +349,10 @@ function renderProgress() {
     else if (myDrop.length && placedN(myDrop) === myDrop.length && !myPick.length) html += `<div class="done-msg">All your signs are dropped off. Thank you!</div>`;
   }
   if (isAdmin() || !mine.length) {
-    const all = state.signs, cnt = { potential: 0, pending: 0, placed: 0 };
+    const all = state.signs, cnt = { potential: 0, pending: 0, placed: 0, missing: 0 };
     all.forEach((s) => cnt[dispState(s)]++);
     html += `<h4>Everyone</h4>${bar("Dropped off", cnt.placed, cnt.placed + cnt.pending, COLORS.placed)}
-      <div class="muted small" style="margin-top:6px"><i class="dot retrieved"></i>${cnt.potential} potential · <i class="dot pending"></i>${cnt.pending} to drop off · <i class="dot placed"></i>${cnt.placed} dropped off</div>`;
+      <div class="muted small" style="margin-top:6px"><i class="dot retrieved"></i>${cnt.potential} potential · <i class="dot pending"></i>${cnt.pending} to drop off · <i class="dot placed"></i>${cnt.placed} dropped off${cnt.missing ? ` · <i class="dot missing"></i>${cnt.missing} missing` : ""}</div>`;
   }
   $("#progressBox").innerHTML = html || `<h4>Progress</h4><span class="muted small">No signs yet.</span>`;
 }
@@ -339,6 +361,7 @@ function cardHTML(s, inMap = false) {
   const st = s.status || "pending";
   let statusLine = `<b class="${dcls(s)}">${DISP_LABEL[dispState(s)]}</b>`;
   if (s.placedAt) statusLine += ` · dropped off ${esc(fmtTime(s.placedAt))}${s.placedBy ? " by " + esc(s.placedBy) : ""}`;
+  if (st === "missing" && s.missingAt) statusLine += ` · reported ${esc(fmtTime(s.missingAt))}${s.missingBy ? " by " + esc(s.missingBy) : ""}`;
   if (s.retrievedAt) statusLine += ` · picked up ${esc(fmtTime(s.retrievedAt))}${s.retrievedBy ? " by " + esc(s.retrievedBy) : ""}`;
   if (s._pending) statusLine += ` · <i>saving…</i>`;
   const dist = state.userPos && hasLoc(s) ? ` · ${fmtDist(distM(state.userPos, s))} away` : "";
@@ -355,6 +378,14 @@ function cardHTML(s, inMap = false) {
       main = `<button class="btn retrieve" data-act="claim-pickup" data-id="${s.id}">🙋 I'll pick this up</button>`;
       hint = "Nobody is picking this sign up yet. Tap the button to take it on.";
     }
+    if (canReportMissing(s)) main += `<button class="btn missing" data-act="missing" data-id="${s.id}">? Report missing</button>`;
+  } else if (st === "missing") {
+    if (canTagPicked(s)) main = `<button class="btn retrieve" data-act="retrieve" data-id="${s.id}">✓ Found it, picked up</button>`;
+    if (isAdmin()) main += `<button class="btn light" data-act="clear-missing" data-id="${s.id}">Clear missing</button>`;
+    hint = splitNames(s.pickupAssignee).length
+      ? (mineFor(s, "pickup") ? "This sign was reported missing. Have a look for it, and tag it picked up if you find it." : "Reported missing. Someone has been sent to look for it.")
+      : isAdmin() ? "Reported missing. Assign a pickup volunteer to look for it (Assign → Pickup), or tap Clear missing to make it a potential location again."
+      : "Reported missing. A coordinator will send someone to look for it.";
   }
   const undo = st === "placed" && canTagDropped(s) ? `<button class="btn link" data-act="undo-place" data-id="${s.id}">Undo dropped off</button>`
     : st === "retrieved" ? `${isAdmin() ? `<button class="btn light" data-act="place-again" data-id="${s.id}">↺ Use location again</button>` : ""}${isAdmin() || mineFor(s, "pickup") ? `<button class="btn link" data-act="undo-retrieve" data-id="${s.id}">Undo picked up</button>` : ""}` : "";
@@ -366,7 +397,7 @@ function cardHTML(s, inMap = false) {
       <div style="min-width:0;flex:1">
         <div class="addr" data-act="show" data-id="${s.id}">${esc(s.address)}</div>
         <div class="meta">${dispState(s) === "potential" && s.status !== "retrieved" ? "No drop-off volunteer yet"
-          : `Drop-off: ${s.assignee ? esc(s.assignee) : '<i class="unas">unassigned</i>'}`}${s.status === "placed" || s.pickupAssignee
+          : `Drop-off: ${s.assignee ? esc(s.assignee) : '<i class="unas">unassigned</i>'}`}${PICKUP_STATES.includes(s.status) || s.pickupAssignee
           ? ` · Pickup: ${s.pickupAssignee ? esc(s.pickupAssignee) : '<i class="unas">not tasked yet</i>'}` : ""}${dist}</div>
         ${s.createdBy ? `<div class="meta small">Added by ${esc(s.createdBy)}</div>` : ""}
         ${hasLoc(s) ? "" : `<div class="warn">Not on map — address couldn't be located</div>`}
@@ -431,9 +462,9 @@ function showMapMsg(html) { const m = $("#mapMsg"); m.innerHTML = `<div>${html}<
 // Drop-off: signs still to place, or already retrieved (they can be placed again).
 // Pickup: anything not yet retrieved.
 function assignable(s, job = state.assign.job) {
-  return job === "drop" ? (s.status || "pending") !== "placed" : s.status === "placed";
+  return job === "drop" ? !PICKUP_STATES.includes(s.status || "pending") : PICKUP_STATES.includes(s.status);
 }
-const RESET_TO_PLACE = { status: "pending", placedBy: null, placedAt: null, retrievedBy: null, retrievedAt: null, pickupAssignee: "" };
+const RESET_TO_PLACE = { status: "pending", placedBy: null, placedAt: null, retrievedBy: null, retrievedAt: null, missingBy: null, missingAt: null, pickupAssignee: "" };
 // Dropped off but nobody tasked to pick it up: small red dot on top of the pin
 const needsPickupTask = (s) => s.status === "placed" && !splitNames(s.pickupAssignee).length;
 const PICKUP_DOT = '<b title="Needs a pickup volunteer" style="position:absolute;left:8px;top:-5px;width:11px;height:11px;border-radius:50%;background:#e03131;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45);z-index:2"></b>';
@@ -469,13 +500,55 @@ function renderMarkers() {
     if (m) m.remove();
     m = L.marker([s.lat, s.lng], {
       icon: makeIcon(s), title: `#${s.num} ${s.address}`,
-      zIndexOffset: state.assign.on ? (assignable(s) ? 300 : 0) : s.status === "pending" ? 300 : s.status === "placed" ? 200 : 0,
+      zIndexOffset: state.assign.on ? (assignable(s) ? 300 : 0) : s.status === "missing" ? 350 : s.status === "pending" ? 300 : s.status === "placed" ? 200 : 0,
     }).addTo(gm.map);
     m._key = key;
     m.on("click", (e) => { L.DomEvent.stopPropagation(e); state.assign.on ? toggleSel(s.id) : select(s.id); });
     gm.markers.set(s.id, m);
   }
 }
+
+// ------------------------------------------------------------------ patrol dog (Patrol Run game)
+// Makya places the dog in Manage; anyone can tap it to play.
+function renderDog() {
+  if (isDogAdmin()) {
+    const ll = gm.dogSpot;
+    $("#dogStatus").textContent = ll ? "The dog is on the map. Tap it there to move it, or place it again." : "The dog isn't on the map.";
+    $("#dogPlaceBtn").textContent = ll ? "Move the dog" : "Place the dog";
+    $("#dogRemoveBtn").classList.toggle("hidden", !ll);
+  }
+  if (!gm.map) return;
+  const ll = gm.dogSpot, game = window.PatrolRun;
+  if (!ll || !game) { if (gm.dog) { gm.dog.remove(); gm.dog = null; } return; }
+  if (gm.dog) { gm.dog.setLatLng([ll.lat, ll.lng]); return; }
+  const icon = L.divIcon({ className: "", html: `<div class="dog-pin"><img src="${game.dogIcon()}" alt="Patrol dog"></div>`, iconSize: [64, 40], iconAnchor: [32, 36], popupAnchor: [0, -30] });
+  gm.dog = L.marker([ll.lat, ll.lng], { icon, title: "Patrol dog: tap to play Patrol Run", zIndexOffset: -100 }).addTo(gm.map);
+  gm.dog.bindPopup(() => `<div class="dog-pop"><b>Woof! It's the patrol dog.</b><span class="muted small">Take a break between signs.</span>
+    <div class="row"><button class="btn primary small" type="button" data-dog="play">⛷ Play Patrol Run</button>
+    ${isDogAdmin() ? `<button class="btn light small" type="button" data-dog="move">Move</button><button class="btn link small" type="button" data-dog="remove">Remove</button>` : ""}</div></div>`);
+}
+function placeDog() {
+  closeAdmin();
+  startPick((ll) => {
+    state.store.saveDogSpot({ lat: ll.lat, lng: ll.lng }).catch(dogErr);
+    toast("Patrol dog placed 🐕");
+  }, null, "Tap the map where the patrol dog goes");
+}
+function removeDog() {
+  if (!confirm("Take the patrol dog off the map?")) return;
+  state.store.saveDogSpot(null).catch(dogErr);
+  toast("Patrol dog removed");
+}
+function dogErr(err) { console.error(err); toast("Couldn't save the dog — " + (err.code === "permission-denied" ? "no permission. Publish the new firestore.rules in Firebase." : "please try again."), 5000); }
+$("#dogPlaceBtn").onclick = placeDog;
+$("#dogRemoveBtn").onclick = removeDog;
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-dog]"); if (!b) return;
+  gm.map?.closePopup();
+  if (b.dataset.dog === "play") window.PatrolRun?.start();
+  else if (b.dataset.dog === "move" && isDogAdmin()) placeDog();
+  else if (b.dataset.dog === "remove" && isDogAdmin()) removeDog();
+});
 
 let fittedOnce = false;
 function fitToVisible() {
@@ -610,9 +683,10 @@ async function setSheetLoc(ll, { fillAddress = true } = {}) {
 }
 
 // Pin-drop mode: hide the sheet, tap the map, come back
-function startPick(onPick, onCancel) {
+function startPick(onPick, onCancel, text = "Tap the map where the sign goes") {
   if (!gm.map) { toast("The map isn't available."); return false; }
   gm.picking = true; gm.onPick = onPick; gm.onPickCancel = onCancel;
+  $("#pickText").textContent = text;
   setView("map"); select(null);
   $("#pickBanner").classList.remove("hidden");
   return true;
@@ -855,7 +929,7 @@ $("#volTable").onclick = async (e) => {
 };
 
 $("#exportBtn").onclick = () => {
-  const cols = ["num", "address", "assignee", "pickupAssignee", "notes", "hazards", "createdBy", "status", "placedBy", "placedAt", "retrievedBy", "retrievedAt", "lat", "lng"];
+  const cols = ["num", "address", "assignee", "pickupAssignee", "notes", "hazards", "createdBy", "status", "placedBy", "placedAt", "missingBy", "missingAt", "retrievedBy", "retrievedAt", "lat", "lng"];
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [cols.join(",")].concat(
     state.signs.slice().sort((a, b) => (a.num || 0) - (b.num || 0)).map((s) =>
@@ -1031,7 +1105,7 @@ function markSafetySeen() {
 // The next sign for this volunteer: nearest "to place" sign, or once all are placed, nearest "to pick up".
 function nextSign() {
   let mode = "place", pool = state.signs.filter((s) => mineFor(s, "drop") && (s.status || "pending") === "pending");
-  if (!pool.length) { mode = "pickup"; pool = state.signs.filter((s) => mineFor(s, "pickup") && s.status === "placed"); }
+  if (!pool.length) { mode = "pickup"; pool = state.signs.filter((s) => mineFor(s, "pickup") && PICKUP_STATES.includes(s.status)); }
   if (!pool.length) return null;
   let cands = pool.filter((s) => !state.skipped.has(s.id));
   if (!cands.length) { state.skipped.clear(); cands = pool; }
@@ -1209,7 +1283,7 @@ function toggleSel(id) {
   const s = state.signs.find((x) => x.id === id);
   if (!s) return;
   if (!assignable(s)) {
-    toast(state.assign.job === "drop" ? `#${s.num} is dropped off now. Task it for pickup instead.`
+    toast(state.assign.job === "drop" ? (s.status === "missing" ? `#${s.num} is missing. Task someone to look for it under Pickup, or clear it from its card.` : `#${s.num} is dropped off now. Task it for pickup instead.`)
       : s.status === "retrieved" ? `#${s.num} is already picked up.`
       : `#${s.num} hasn't been dropped off. Pickup can only be assigned once it's tagged dropped off.`, 4500);
     return;
@@ -1259,7 +1333,7 @@ function renderAssign() {
         <h3>Last Call Stragglers</h3><span class="count">${strag.length}</span>
         ${strag.length ? `<button class="btn link sel-strag-all" type="button">Select all</button>` : ""}
       </div>
-      <p class="muted small" style="margin:2px 0 8px">${job === "drop" ? "Potential locations with nobody tasked to drop off." : "Dropped-off signs with nobody tasked to pick them up."}</p>
+      <p class="muted small" style="margin:2px 0 8px">${job === "drop" ? "Potential locations with nobody tasked to drop off." : "Dropped-off or missing signs with nobody tasked to pick them up. Purple = reported missing."}</p>
       ${strag.length ? `<div class="srows">${strag.sort((x, y) => (x.num || 0) - (y.num || 0)).map(rowFor).join("")}</div>`
         : `<div class="all-covered">Everyone's covered. No ${JOB_LABEL[job].toLowerCase()} stragglers.</div>`}
     </div>

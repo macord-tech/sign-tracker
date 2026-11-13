@@ -12,7 +12,10 @@ service cloud.firestore {
     // Coordinator master code. Security rules can't be read by the app, so this stays private.
     // To change it, edit this line and publish the rules again.
     function adminCode() { return 'CSPadmin'; }
+    // The only coordinator who can place the patrol dog (Patrol Run game) on the map
+    function dogAdminName() { return 'makya'; }
     function signedIn() { return request.auth != null; }
+    function myName() { return get(/databases/$(db)/documents/members/$(request.auth.uid)).data.name; }
     function isMember() {
       return signedIn() && exists(/databases/$(db)/documents/members/$(request.auth.uid));
     }
@@ -75,18 +78,29 @@ service cloud.firestore {
         && (resource == null || request.resource.data.best > resource.data.best);
     }
 
+    // Patrol dog location: everyone reads; only the head coordinator places, moves or removes it
+    match /game/spot {
+      allow read: if isMember();
+      allow write: if isAdmin() && myName().lower() == dogAdminName()
+        && (request.resource == null
+            || (request.resource.data.keys().hasOnly(['lat', 'lng', 'placedBy', 'at'])
+                && request.resource.data.lat is number && request.resource.data.lng is number));
+    }
+
     function signFieldsOk() {
       return request.resource.data.keys().hasOnly([
         'num', 'address', 'lat', 'lng', 'assignee', 'pickupAssignee', 'notes', 'hazards',
-        'status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt',
+        'status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt', 'missingBy', 'missingAt',
         'updatedAt', 'updatedBy', 'createdAt', 'createdBy', 'createdByUid'])
-        && request.resource.data.status in ['pending', 'placed', 'retrieved']
+        && request.resource.data.status in ['pending', 'placed', 'retrieved', 'missing']
         && (!('hazards' in request.resource.data) || request.resource.data.hazards is list)
         && request.resource.data.address is string && request.resource.data.address.size() <= 300;
     }
-    // A sign can only be tagged "picked up" once it has been tagged "dropped off"
+    // A sign can only be tagged "picked up" once it has been tagged "dropped off" (or found after being reported missing).
+    // A missing sign can only be tagged picked up; only coordinators can clear or reassign it.
     function pickupOk() {
-      return request.resource.data.status != 'retrieved' || resource.data.status in ['placed', 'retrieved'];
+      return (request.resource.data.status != 'retrieved' || resource.data.status in ['placed', 'retrieved', 'missing'])
+        && (resource.data.status != 'missing' || request.resource.data.status in ['missing', 'retrieved']);
     }
     function isCreator() {
       return isMember() && resource.data.get('createdByUid', '') == request.auth.uid;
@@ -112,11 +126,19 @@ service cloud.firestore {
             && resource.data.get('pickupAssignee', '') == ''
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pickupAssignee', 'updatedAt', 'updatedBy'])
             && request.resource.data.pickupAssignee == get(/databases/$(db)/documents/members/$(request.auth.uid)).data.name)
+        // the pickup volunteer can report a dropped-off sign missing, in their own name; it leaves their pickup list
+        || (isMember() && resource.data.status == 'placed'
+            && resource.data.get('pickupAssignee', '') != ''
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['status', 'missingBy', 'missingAt', 'pickupAssignee', 'updatedAt', 'updatedBy'])
+            && request.resource.data.status == 'missing'
+            && request.resource.data.pickupAssignee == ''
+            && request.resource.data.missingBy == myName())
         // a volunteer can claim the drop-off of a potential location (no drop-off volunteer, or already picked up), in their own name
         || (isMember()
             && ((resource.data.status == 'pending' && resource.data.get('assignee', '') == '') || resource.data.status == 'retrieved')
             && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['assignee', 'pickupAssignee', 'status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt', 'updatedAt', 'updatedBy'])
+                 .hasOnly(['assignee', 'pickupAssignee', 'status', 'placedBy', 'placedAt', 'retrievedBy', 'retrievedAt', 'missingBy', 'missingAt', 'updatedAt', 'updatedBy'])
             && request.resource.data.status == 'pending'
             && request.resource.data.get('pickupAssignee', '') == ''
             && request.resource.data.assignee == get(/databases/$(db)/documents/members/$(request.auth.uid)).data.name)

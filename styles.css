@@ -18,6 +18,7 @@
   --pending: #f08c00;
   --placed: #2b8a3e;
   --retrieved: #8a8f96;
+  --missing: #7b2cbf;
   --blue: #1c64d1;
   --shadow: 0 6px 24px rgba(0,0,0,.18);
   --map-filter: none;
@@ -42,6 +43,7 @@
   --pending: #f59f00;
   --placed: #37b24d;
   --retrieved: #868e96;
+  --missing: #9d4edd;
   --blue: #4c8df6;
   --shadow: 0 6px 24px rgba(0,0,0,.55);
   --map-filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.9) saturate(.6);
@@ -75,6 +77,13 @@ a { color: var(--brand); }
 .btn.big { padding: 14px; font-size: 16px; width: 100%; }
 .btn.primary { background: var(--brand); color: var(--brand-ink); }
 .btn.place { background: var(--placed); color: #fff; }
+.btn.missing { background: var(--card); color: var(--missing); border-color: color-mix(in srgb, var(--missing) 55%, transparent); }
+/* Patrol dog (Patrol Run game) on the map */
+.dog-pin { width: 64px; height: 40px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); cursor: pointer; }
+.dog-pin img { width: 64px; height: 40px; display: block; }
+.dog-pop { text-align: center; min-width: 170px; }
+.dog-pop b { display: block; font-size: 15px; margin-bottom: 2px; }
+.dog-pop .row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
 .btn.retrieve { background: var(--blue); color: #fff; }
 .btn.light { background: var(--card); border-color: var(--line); color: var(--ink); }
 .btn.ghost { background: transparent; color: inherit; border-color: rgba(127,127,127,.4); }
@@ -184,7 +193,7 @@ label input { margin-top: 4px; font-weight: 400; font-size: 15px; }
   border-radius: 8px; padding: 5px 9px; font-size: 12px; display: flex; gap: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.25); z-index: 500;
 }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
-.dot.pending { background: var(--pending); } .dot.placed { background: var(--placed); } .dot.retrieved { background: var(--retrieved); }
+.dot.pending { background: var(--pending); } .dot.placed { background: var(--placed); } .dot.retrieved { background: var(--retrieved); } .dot.missing { background: var(--missing); }
 .pick-banner {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--brand); color: #fff;
   padding: 8px 10px 8px 14px; border-radius: 99px; display: flex; gap: 10px; align-items: center; z-index: 600; white-space: nowrap; font-weight: 600;
@@ -200,7 +209,7 @@ label input { margin-top: 4px; font-weight: 400; font-size: 15px; }
 .pin { width: 30px; height: 30px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff;
   box-shadow: 0 2px 5px rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; margin-top: 2px; }
 .pin span { transform: rotate(45deg); color: #fff; font-weight: 800; font-size: 12px; }
-.pin.pending { background: var(--pending); } .pin.placed { background: var(--placed); } .pin.retrieved { background: var(--retrieved); }
+.pin.pending { background: var(--pending); } .pin.placed { background: var(--placed); } .pin.retrieved { background: var(--retrieved); } .pin.missing { background: var(--missing); }
 .pin.mine { border-color: var(--ink); border-width: 3px; }
 .me-pin { width: 16px; height: 16px; border-radius: 50%; background: var(--blue); border: 3px solid #fff; box-shadow: 0 0 0 6px color-mix(in srgb, var(--blue) 25%, transparent); }
 
@@ -229,12 +238,12 @@ label input { margin-top: 4px; font-weight: 400; font-size: 15px; }
   flex: none; min-width: 30px; height: 30px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 13px;
   display: flex; align-items: center; justify-content: center; padding: 0 6px;
 }
-.num.pending { background: var(--pending); } .num.placed { background: var(--placed); } .num.retrieved { background: var(--retrieved); }
+.num.pending { background: var(--pending); } .num.placed { background: var(--placed); } .num.retrieved { background: var(--retrieved); } .num.missing { background: var(--missing); }
 .sign .addr { font-weight: 700; font-size: 15px; cursor: pointer; padding-right: 22px; }
 .sign .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .sign .notes { font-size: 13px; margin-top: 6px; background: var(--soft); border-radius: 6px; padding: 6px 8px; }
 .sign .status { font-size: 12px; margin-top: 6px; color: var(--muted); }
-.sign .status b.pending { color: var(--pending); } .sign .status b.placed { color: var(--placed); } .sign .status b.retrieved { color: var(--retrieved); }
+.sign .status b.pending { color: var(--pending); } .sign .status b.placed { color: var(--placed); } .sign .status b.retrieved { color: var(--retrieved); } .sign .status b.missing { color: var(--missing); }
 .sign .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
 .sign .actions .btn.place, .sign .actions .btn.retrieve { flex: 1 1 150px; padding: 12px; font-size: 15px; white-space: nowrap; }
 .warn { color: var(--pending); font-size: 12px; }

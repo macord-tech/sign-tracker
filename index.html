@@ -93,12 +93,13 @@
             <button class="btn primary do-assign" type="button"></button>
           </div>
         </div>
-        <div id="pickBanner" class="pick-banner hidden">Tap the map where the sign goes <button id="pickCancel" class="btn small light" type="button">Cancel</button></div>
+        <div id="pickBanner" class="pick-banner hidden"><span id="pickText">Tap the map where the sign goes</span> <button id="pickCancel" class="btn small light" type="button">Cancel</button></div>
         <div id="mapCard" class="map-card hidden"></div>
         <div class="legend">
           <span><i class="dot retrieved"></i>Potential</span>
           <span><i class="dot pending"></i>To drop off</span>
           <span><i class="dot placed"></i>Dropped off</span>
+          <span><i class="dot missing"></i>Missing</span>
         </div>
       </section>
 
@@ -117,6 +118,7 @@
             <option value="potential">Potential locations</option>
             <option value="pending">To drop off</option>
             <option value="placed">Dropped off (to pick up)</option>
+            <option value="missing">Missing</option>
           </select>
           <select id="sortSel" aria-label="Sort">
             <option value="num">By number</option>
@@ -183,6 +185,16 @@
         </form>
         <p id="volMsg" class="small"></p>
         <div id="volTable"></div>
+      </section>
+
+      <section id="dogSec" class="card hidden">
+        <h3>Patrol dog (game)</h3>
+        <p class="muted small">Place the patrol dog on the map. Anyone who taps it can play Patrol Run. Only you can see this.</p>
+        <p id="dogStatus" class="small"></p>
+        <div class="row wrap">
+          <button id="dogPlaceBtn" class="btn primary" type="button">Place the dog</button>
+          <button id="dogRemoveBtn" class="btn light hidden" type="button">Take the dog off the map</button>
+        </div>
       </section>
 
       <section class="card">

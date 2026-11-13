@@ -50,7 +50,11 @@ Set `defaultCenter` to your town. Set `addressSuffix` (e.g. `"Vancouver, BC"`) a
 
 ## Using it
 
-Tap the **?** button at the top of the app for a short how-to. Volunteers see the volunteer guide; coordinators see both. (Psst: tap the logo 5 times for a break between signs.)
+Tap the **?** button at the top of the app for a short how-to. Volunteers see the volunteer guide; coordinators see both.
+
+### Patrol dog (Patrol Run game)
+The patrol dog from the Patrol Run ski game can sit on the map. Anyone who taps it gets a **Play Patrol Run** button.
+Only the coordinator signed in as **Makya** can place, move or remove it: **Manage → Patrol dog (game) → Place the dog**, then tap the map. To change who that is, edit `DOG_ADMIN` in `app.js` and `dogAdminName()` in `firestore.rules` (lower case), then publish the rules again.
 
 ### Emergency and Safety tabs
 - **Emergency:** your contact list, with **Call** and **Text** buttons for each person. Coordinators tap **Edit contacts** to add names, roles and phone numbers.
@@ -99,6 +103,10 @@ Tap the **?** button at the top of the app for a short how-to. Volunteers see th
 3. **Sign dropped off** (green): tagged by the drop-off volunteer or a coordinator.
 4. **Tasked for pickup:** the coordinator assigns a pickup volunteer in Assign mode (Pickup), or a volunteer claims it with **🙋 I'll pick this up**. **This is only possible once the sign is tagged dropped off.** Until then the pin shows a small red dot.
 5. **Picked up:** tagged by the pickup volunteer or a coordinator. The location goes back to grey **Potential location**, ready for next time.
+
+**Missing** (purple): if the sign isn't there at pickup, the pickup volunteer taps **? Report missing**. The sign leaves their list and appears in **Last Call Stragglers** under **Pickup**. A coordinator can then:
+- **Reassign it:** Assign mode (Pickup) → select → **Assign to…**. That person looks for it and taps **✓ Found it, picked up** if it turns up.
+- **Clear it:** tap **Clear missing** on its card. The location goes back to grey **Potential location** with nobody assigned.
 
 If a drop-off never happens, unassign it in Assign mode (Drop-off → select → Assign to… → **Unassign**). The location goes back to grey **Potential location**.
 
